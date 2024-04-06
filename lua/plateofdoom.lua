@@ -1,5 +1,7 @@
 --!strict
 
+local ownername = if owner then owner.Name else 'Server'
+
 type PlatformEvent = {
 	text: string,
 	run: (platform: Part) -> any
@@ -12,6 +14,10 @@ type Character = {
 	Humanoid: Humanoid,
 	Head: Part
 }
+type PlateType = {
+	name: string,
+	run: (part: Part) -> nil
+}
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -21,6 +27,9 @@ _spawn.Anchored = true
 
 local _message = Instance.new('Hint', script)
 local function declare(message: string)
+	if not _message then 
+		_message = Instance.new('Hint', script)
+	end
 	_message.Text = message
 end
 
@@ -115,7 +124,7 @@ local platformEvents: { PlatformEvent } = {
 	{
 		text = '%s platform will expand by %.1f studs vertically',
 		run = function(platform: Part)
-			local qty = math.random() * 5 - 2.5
+			local qty = math.random() * 1.8 - 0.9
 			if platform.Size.Y < -qty then
 				platform:Destroy()
 			else
@@ -153,7 +162,7 @@ local platformEvents: { PlatformEvent } = {
 		text = '%s platform will become %s',
 		run = function(platform: Part)
 			local factor = math.random(1, 5)
-			local types = {
+			local types: { PlateType } = {
 				{
 					name = 'corrosive',
 					color = BrickColor.Yellow(),
@@ -198,7 +207,7 @@ local platformEvents: { PlatformEvent } = {
 						if not hum then return end
 						hum:TakeDamage(factor * 5)
 					end
-				},
+				}
 			}
 			local t = randomElement(types)
 			platform.BrickColor = t.color
@@ -206,6 +215,38 @@ local platformEvents: { PlatformEvent } = {
 			return t.name
 		end
 	},
+	{
+		text = '%s platform will leave',
+		run = function(platform: Part)
+			local dir = Vector3.new(math.random() * 2 - 1, math.random() * 2 - 1, math.random() * 2 - 1)
+			TweenService:Create(platform, TweenInfo.new(1000 / math.random()), {
+				Position = platform.Position + dir * 500
+			}):Play()
+		end
+	},
+	{
+		text = '%s platform will be cleared',
+		run = function(platform: Part)
+			platform:ClearAllChildren()
+		end
+	},
+	{
+		text = '%s will gain control of their platform',
+		run = function(platform: Part)
+			local seat = Instance.new('VehicleSeat')
+			seat.Size = Vector3.one * 2
+			seat.Anchored = true
+			seat.BrickColor = platform.BrickColor
+			seat.Parent = platform
+			task.spawn(function()
+				while platform and seat do
+					local delta = task.wait(1/20)
+					platform.Position += Vector3.new(seat.SteerFloat, 0, -seat.ThrottleFloat) * delta * 2
+					seat.Position = platform.Position
+				end
+			end)
+		end
+	}
 }
 
 while true do
@@ -226,12 +267,12 @@ while true do
 				table.remove(joined, i)
 			end
 		end)
-		for i = 15, 1, -1 do
+		for i = 25, 1, -1 do
 			local roster = ""
 			for _, player in ipairs(joined) do
 				roster ..= player.DisplayName .. '\n'
 			end
-			declare(`{('\n'):rep(#joined)}\nStarting the plate of the doom in {i} seconds - Say p%join to join\n{roster}`)
+			declare(`{('\n'):rep(#joined)}\ngithub.com/fofl12/sk - {ownername} is running this script - Starting the plate of the doom in {i} seconds - Say p%join to join\n{roster}`)
 			task.wait(1)
 		end
 		leftConn:Disconnect()
@@ -285,6 +326,7 @@ while true do
 				remaining += 1
 			end
 		end
+		local survival = remaining == 1
 		local w = math.ceil(math.sqrt(#joined))
 		local h = math.floor(#joined / w)
 		for i = 1, #joined do
@@ -303,7 +345,7 @@ while true do
 		task.wait(3)
 
 		local itm = 4
-		while remaining > 1 do
+		while remaining > (if survival then 0 else 1) do
 			local t = if math.random() < .4 then 'player' else 'platform'
 			if t == 'player' then
 				local event = randomElement(playerEvents)
@@ -336,13 +378,13 @@ while true do
 		end
 
 		task.wait(5)
-		declare('Restarting in 5 seconds')
-		task.wait(5)
 	end, function(...)
 		warn(debug.traceback(...))
 	end)
 	if not err then
-		declare('Restarting because of error...')
-		task.wait(10)
+		script:ClearAllChildren()
+		_message = Instance.new('Hint', script)
+		declare('Restarting because of error')
+		task.wait(5)
 	end
 end
