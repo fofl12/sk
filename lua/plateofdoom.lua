@@ -33,11 +33,15 @@ local function declare(message: string)
 	_message.Text = message
 end
 
+local ptweens: { Tween } = {}
+
 local function randomElement(t: table): any
 	while true do
 		if #t == 0 then return nil end
 		local element = t[math.random(1, #t)]
-		if element then return element end
+		if not element then continue end
+		--if typeof(element) == 'Instance' and element.Parent == nil then return end
+		return element
 	end
 end
 
@@ -83,9 +87,12 @@ local playerEvents: { PlayerEvent } = {
 					end
 				},
 				{
-					name = 'Ascend (temporarily)',
+					name = 'Anchor yourself ?! (temporarily)',
 					run = function(c: Character)
-						c.Head.Velocity = Vector3.yAxis * 100
+						c.Head.Anchored = true
+						task.delay(math.random(6, 30), function()
+							c.Head.Anchored = false
+						end)
 					end
 				}
 			}
@@ -106,7 +113,13 @@ local playerEvents: { PlayerEvent } = {
 			handle.Parent = new
 			new.Parent = player.Backpack
 		end
-	}
+	},
+	{
+		text = '%s will be given blast protection',
+		run = function(player: Player)
+			Instance.new('ForceField', player.Character)
+		end
+	},
 }
 local platformEvents: { PlatformEvent } = {
 	{
@@ -114,7 +127,7 @@ local platformEvents: { PlatformEvent } = {
 		run = function(platform: Part)
 			local qty = math.random() * 10 - 5
 			if platform.Size.X < -qty then
-				platform:Destroy()
+				platform.Parent = nil
 			else
 				platform.Size += Vector3.new(qty, 0, qty)
 			end
@@ -126,7 +139,7 @@ local platformEvents: { PlatformEvent } = {
 		run = function(platform: Part)
 			local qty = math.random() * 1.8 - 0.9
 			if platform.Size.Y < -qty then
-				platform:Destroy()
+				platform.Parent = nil
 			else
 				platform.Size += Vector3.yAxis * qty
 			end
@@ -137,9 +150,11 @@ local platformEvents: { PlatformEvent } = {
 		text = '%s platform will be raised by %.1f studs',
 		run = function(platform: Part)
 			local qty = math.random() * 20 - 10
-			TweenService:Create(platform, TweenInfo.new(math.random() * 20), {
+			local tween = TweenService:Create(platform, TweenInfo.new(math.random() * 20), {
 				Position = platform.Position + Vector3.yAxis * qty
-			}):Play()
+			})
+			table.insert(ptweens, tween)
+			tween:Play()
 			return qty
 		end
 	},
@@ -150,10 +165,12 @@ local platformEvents: { PlatformEvent } = {
 			local tween = TweenService:Create(platform, TweenInfo.new(qty), {
 				Transparency = 1
 			})
+			table.insert(ptweens, tween)
 			tween:Play()
 			task.delay(qty, function()
+				if tween.PlaybackState == Enum.PlaybackState.Cancelled then return end
 				if platform then
-					platform:Destroy()
+					platform.Parent = nil
 				end
 			end)
 		end
@@ -219,9 +236,11 @@ local platformEvents: { PlatformEvent } = {
 		text = '%s platform will leave',
 		run = function(platform: Part)
 			local dir = Vector3.new(math.random() * 2 - 1, math.random() * 2 - 1, math.random() * 2 - 1)
-			TweenService:Create(platform, TweenInfo.new(1000 / math.random()), {
+			local tween = TweenService:Create(platform, TweenInfo.new(1000 / math.random()), {
 				Position = platform.Position + dir * 500
-			}):Play()
+			})
+			table.insert(ptweens, tween)
+			tween:Play()
 		end
 	},
 	{
@@ -245,6 +264,18 @@ local platformEvents: { PlatformEvent } = {
 					seat.Position = platform.Position
 				end
 			end)
+		end
+	},
+	{
+		text = '%s will be given a new platform',
+		run = function(platform: Part)
+			for _, tween in next, ptweens do
+				if tween.Instance == platform then
+					tween:Cancel()
+				end
+			end
+			platform.BrickColor = BrickColor.random()
+			platform.Parent = script
 		end
 	}
 }
@@ -272,7 +303,7 @@ while true do
 			for _, player in ipairs(joined) do
 				roster ..= player.DisplayName .. '\n'
 			end
-			declare(`{('\n'):rep(#joined)}\ngithub.com/fofl12/sk - {ownername} is running this script - Starting the plate of the doom in {i} seconds - Say p%join to join\n{roster}`)
+			declare(`{('\n'):rep(#joined)}\ngithub.com/fofl12/sk - Starting the plate of the doom in {i} seconds - Say p%join to join\n{roster}`)
 			task.wait(1)
 		end
 		leftConn:Disconnect()
@@ -300,13 +331,15 @@ while true do
 			if not (player and player.Character and player.Character:FindFirstChild('Head') and player.Character:FindFirstChild('Humanoid')) then
 				table.remove(joined, i)
 			else
-				player.Backpack:ClearAllChildren()
-				player.Character.Humanoid.WalkSpeed = 16
-				player.Character.Humanoid.JumpPower = 50
-				player.Character.Humanoid.MaxHealth = 100
+				player:LoadCharacter()
+				if not player.Character then player.CharacterAdded:Wait() end
 				if player.Character:FindFirstChild('Health') then
 					player.Character.Health:Destroy()
 				end
+				player.Character.Humanoid.WalkSpeed = 0
+				task.delay(3, function()
+					player.Character.Humanoid.WalkSpeed = 16
+				end)
 				player.Character.Head.CFrame = CFrame.new(0, 100, 0)
 				local alive = player.Character.Humanoid.Died:Once(function()
 					rem(i)
