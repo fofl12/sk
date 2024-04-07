@@ -4,11 +4,13 @@ local ownername = if owner then owner.Name else 'Server'
 
 type PlatformEvent = {
 	text: string,
-	run: (platform: Part) -> any
+	run: (platform: Part) -> any,
+	condition: (platform: Part) -> boolean,
 }
 type PlayerEvent = {
 	text: string,
-	run: (player: Player) -> any
+	run: (player: Player) -> any,
+	condition: (player: Player) -> boolean,
 }
 type Character = {
 	Humanoid: Humanoid,
