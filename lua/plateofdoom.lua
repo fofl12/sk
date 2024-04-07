@@ -336,23 +336,31 @@ local autojoined = {}
 while true do
 	local err = xpcall(function()
 		local conns: { RBXScriptConnection } = {}
-		local joined: { Player } = {}
-		for _, player in pairs(autojoined) do
-			table.insert(joined, player)
-		end
+		local joined: { Player } = table.clone(autojoined)
 		for i, player in next, Players:GetPlayers() do
 			conns[i] = player.Chatted:Connect(function(message)
 				if message == 'p%join' then
-					table.insert(joined, player)
+					local i = table.find(joined,player)
+					if not i then
+						table.insert(joined, player)
+					end
 				elseif message == "p%leave" then
 					local i = table.find(joined,player)
 					if i then
 						table.remove(joined,i)
 					end
 				elseif message == 'p%auto' then
-					table.insert(autojoined, player)
+					local i = table.find(joined,player)
+					if not i then
+						table.insert(joined, player)
+					end
 
-					table.insert(joined, player)
+					local i = table.find(autojoined,player)
+					if not i then
+						table.insert(autojoined, player)
+					else
+						table.remove(autojoined, i)
+					end
 				end
 			end)
 		end
