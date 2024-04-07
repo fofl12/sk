@@ -1,7 +1,5 @@
 --!strict
 
-local ownername = if owner then owner.Name else 'Server'
-
 type PlatformEvent = {
 	text: string,
 	run: (platform: Part) -> any,
@@ -23,6 +21,9 @@ type PlateType = {
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local MemoryStoreService = game:GetService("MemoryStoreService")
+local Debris = game:GetService("Debris")
+local survivalRecord = MemoryStoreService:GetQueue('github.com/fofl12/sk - plateofdoom.lua', 1)
 
 local _spawn = Instance.new('SpawnLocation', script)
 _spawn.Anchored = true
@@ -35,7 +36,37 @@ local function declare(message: string)
 	_message.Text = message
 end
 
-local ptweens: { Tween } = {}
+function getChatColor(user: string): Color3
+	local CHAT_COLORS =
+	{
+		Color3.new(253/255, 41/255, 67/255), -- BrickColor.new("Bright red").Color,
+		Color3.new(1/255, 162/255, 255/255), -- BrickColor.new("Bright blue").Color,
+		Color3.new(2/255, 184/255, 87/255), -- BrickColor.new("Earth green").Color,
+		BrickColor.new("Bright violet").Color,
+		BrickColor.new("Bright orange").Color,
+		BrickColor.new("Bright yellow").Color,
+		BrickColor.new("Light reddish violet").Color,
+		BrickColor.new("Brick yellow").Color,
+	}
+
+		local function GetNameValue(pName)
+			local value = 0
+			for index = 1, #pName do
+				local cValue = string.byte(string.sub(pName, index, index))
+				local reverseIndex = #pName - index + 1
+				if #pName%2 == 1 then
+					reverseIndex = reverseIndex - 1
+				end
+				if reverseIndex%4 >= 2 then
+					cValue = -cValue
+				end
+				value = value + cValue
+			end
+			return value
+		end
+
+	return CHAT_COLORS[(GetNameValue(user) % #CHAT_COLORS) + 1]
+end
 
 local function randomElement(t: table): any
 	while true do
@@ -46,6 +77,18 @@ local function randomElement(t: table): any
 		return element
 	end
 end
+
+local function platformbind(signal: RBXScriptSignal, platform: Part): RBXScriptSignal
+	local new = Instance.new('BindableEvent', platform)
+	local connection: RBXScriptConnection
+	signal:Connect(function(...)
+		if not (new and platform) then connection:Disconnect();return end
+		new:Fire(...)
+	end)
+	return new.Event
+end
+
+local ptweens: { Tween } = {}
 
 local playerEvents: { PlayerEvent } = {
 	{
@@ -132,12 +175,14 @@ local playerEvents: { PlayerEvent } = {
 		end
 	},
 	{
-		text = '%s will be given protection',
+		text = '%s will be given protection for %i seconds',
 		condition = function(player: Player)
 			return not player.Character:FindFirstChildWhichIsA('ForceField')
 		end,
 		run = function(player: Player)
-			Instance.new('ForceField', player.Character)
+			local qty = math.random(20, 200)
+			Debris:AddItem(Instance.new('ForceField', player.Character), qty)
+			return qty
 		end
 	},
 }
@@ -149,10 +194,19 @@ local platformEvents: { PlatformEvent } = {
 		end,
 		run = function(platform: Part)
 			local qty = math.random() * 10 - 5
+			local t = math.random() * 20
+			local tween = TweenService:Create(platform, TweenInfo.new(t), {
+				Size = platform.Size + Vector3.new(qty, 0, qty)
+			})
+			table.insert(ptweens, tween)
+			tween:Play()
 			if platform.Size.X < -qty then
-				platform.Parent = nil
-			else
-				platform.Size += Vector3.new(qty, 0, qty)
+				task.delay(t, function()
+					if tween.PlaybackState == Enum.PlaybackState.Cancelled then return end
+					if platform then
+						platform.Parent = nil
+					end
+				end)
 			end
 			return qty
 		end
@@ -164,10 +218,19 @@ local platformEvents: { PlatformEvent } = {
 		end,
 		run = function(platform: Part)
 			local qty = math.random() * 1.8 - 0.9
+			local t = math.random() * 20
+			local tween = TweenService:Create(platform, TweenInfo.new(t), {
+				Size = platform.Size + Vector3.yAxis * qty
+			})
+			table.insert(ptweens, tween)
+			tween:Play()
 			if platform.Size.Y < -qty then
-				platform.Parent = nil
-			else
-				platform.Size += Vector3.yAxis * qty
+				task.delay(t, function()
+					if tween.PlaybackState == Enum.PlaybackState.Cancelled then return end
+					if platform then
+						platform.Parent = nil
+					end
+				end)
 			end
 			return qty
 		end
@@ -213,18 +276,19 @@ local platformEvents: { PlatformEvent } = {
 			return platform and (platform.Parent ~= nil)
 		end,
 		run = function(platform: Part)
-			local factor = math.random(1, 5)
+			local factora = math.random(1, 5)
+			local factorb = math.random(1, 5)
 			local types: { PlateType } = {
 				{
 					name = 'corrosive',
 					color = BrickColor.Yellow(),
 					run = function(part: Part)
 						if math.random() < .5 then return end
-						local tween = TweenService:Create(part, TweenInfo.new(factor * 10), {
+						local tween = TweenService:Create(part, TweenInfo.new(factora * 10), {
 							Transparency = 1
 						})
 						tween:Play()
-						task.delay(factor * 10, function()
+						task.delay(factora * 10, function()
 							if part then
 								part:Destroy()
 							end
@@ -246,9 +310,10 @@ local platformEvents: { PlatformEvent } = {
 						local hum = part.Parent:FindFirstChild('Humanoid')
 						if not hum then return end
 						if hum.Health == hum.MaxHealth then
-							hum.MaxHealth += factor / 5
+							hum.MaxHealth += factorb / 5
+						else
+							hum.Health += factora
 						end
-						hum.Health += factor
 					end
 				},
 				{
@@ -257,13 +322,27 @@ local platformEvents: { PlatformEvent } = {
 					run = function(part: Part)
 						local hum = part.Parent:FindFirstChild('Humanoid')
 						if not hum then return end
-						hum:TakeDamage(factor * 5)
+						hum:TakeDamage(factora * 5)
+					end
+				},
+				{
+					name = 'bouncy',
+					color = BrickColor.Black(),
+					run = function(part: Part)
+						platform.Velocity = Vector3.new(0, factora * 10, 0)
+					end
+				},
+				{
+					name = 'a conveyer belt',
+					color = BrickColor.Black(),
+					run = function(part: Part)
+						platform.Velocity = Vector3.new(factora * 4 - 10, 0, factorb * 4 - 10)
 					end
 				}
 			}
 			local t = randomElement(types)
 			platform.BrickColor = t.color
-			platform.Touched:Connect(t.run)
+			platformbind(platform.Touched, platform):Connect(t.run)
 			return t.name
 		end
 	},
@@ -322,7 +401,6 @@ local platformEvents: { PlatformEvent } = {
 					tween:Cancel()
 				end
 			end
-			platform.BrickColor = BrickColor.random()
 			platform.Size = Vector3.new(8, 1, 8)
 			platform.Transparency = 0
 			platform:ClearAllChildren()
@@ -381,7 +459,7 @@ while true do
 			for _, player in ipairs(joined) do
 				roster ..= player.DisplayName .. '\n'
 			end
-			declare(`{('\n'):rep(#joined)}\ngithub.com/fofl12/sk - Starting the plate of the doom in {i} seconds - Say p%join to join\n{roster}`)
+			declare(`{('\n'):rep(#joined)}\ngithub.com/fofl12/sk - Starting the plate of the doom in {i} seconds - Say p%join or p%auto to join\n{roster}`)
 			task.wait(1)
 			i -= 1
 		end
@@ -408,56 +486,54 @@ while true do
 		local aliveConns = {}
 		local remaining = 0
 		for i, player in next, joined do
-			if not (player and player.Character and player.Character:FindFirstChild('Head') and player.Character:FindFirstChild('Humanoid')) then
-				table.remove(joined, i)
-			else
-				player:LoadCharacter()
-				if not player.Character then player.CharacterAdded:Wait() end
-				if player.Character:FindFirstChild('Health') then
-					player.Character.Health:Destroy()
-				end
-				player.Character.Humanoid.WalkSpeed = 0
-				task.delay(3, function()
-					player.Character.Humanoid.WalkSpeed = 16
-				end)
-				player.Character.Head.CFrame = CFrame.new(0, 100, 0)
-				local alive = player.Character.Humanoid.Died:Once(function()
-					rem(i)
-					remaining -= 1
-				end)
-				task.spawn(function()
-					while task.wait(1) do
-						if not alive.Connected then return end
-						if not (player and player.Character and player.Character:FindFirstChild('Head')) then break end
-						if player.Character.Head.Position.Y < 40 then break end
-					end
-					rem(i)
-					alive:Disconnect()
-					remaining -= 1
-				end)
-				aliveConns[i] = alive
-				remaining += 1
+			player:LoadCharacter()
+			if not player.Character then player.CharacterAdded:Wait() end
+			if player.Character:FindFirstChild('Health') then
+				player.Character.Health:Destroy()
 			end
+			player.Character.Humanoid.WalkSpeed = 0
+			task.delay(3, function()
+				player.Character.Humanoid.WalkSpeed = 16
+			end)
+			player.Character.Head.CFrame = CFrame.new(0, 10000, 0)
+			local alive = player.Character.Humanoid.Died:Once(function()
+				rem(i)
+				remaining -= 1
+			end)
+			task.spawn(function()
+				while task.wait(1) do
+					if not alive.Connected then return end
+					if not (player and player.Character and player.Character:FindFirstChild('Head')) then break end
+					if player.Character.Head.Position.Y < (if player.Character:FindFirstChildWhichIsA('ForceField') then 30 else 40) then break end
+				end
+				rem(i)
+				alive:Disconnect()
+				remaining -= 1
+			end)
+			aliveConns[i] = alive
+			remaining += 1
 		end
 		local survival = remaining == 1
+		local survivalplayer = joined[1]
 		local w = math.ceil(math.sqrt(#joined))
 		local h = math.floor(#joined / w)
 		for i = 1, #joined do
 			local new = Instance.new('Part')
 			new.Anchored = true
-			new.BrickColor = BrickColor.random()
+			new.Color = getChatColor(joined[i].Name)
 			new.Size = Vector3.new(8, 1, 8)
 			new.Position = Vector3.new(0, 50, 0) + Vector3.new(i % w - w / 2, 0, math.floor(i / w) - h / 2) * 14
 			new.Name = joined[i].DisplayName
 			platforms[i] = new
 			new.Parent = script
-			joined[i].Character.Head.CFrame = new.CFrame + Vector3.yAxis * 10
+			joined[i].Character.Head.CFrame = new.CFrame + Vector3.yAxis * 50
 		end
 
-		declare('Starting...')
+		declare('Starting ' .. (if survival then 'Survival mode' else 'Battle royale mode'))
 		task.wait(3)
 
-		local itm = 4
+		local rounds = 0
+		local prevEvent = {}
 		while remaining > (if survival then 0 else 1) do
 			while true do
 				task.wait()
@@ -465,25 +541,44 @@ while true do
 				if t == 'player' then
 					local player = randomElement(joined)
 					local event = randomElement(playerEvents)
+					if prevEvent == event then continue end
 					if not event.condition(player) then continue end
 					declare(event.text:format(player.DisplayName, event.run(player)))
+					prevEvent = event
 				elseif t == 'platform' then
 					local platform = randomElement(platforms)
 					local event = randomElement(platformEvents)
+					if prevEvent == event then continue end
 					if not event.condition(platform) then continue end
 					declare(event.text:format(platform.Name, event.run(platform)))
+					prevEvent = event
 				end
 				break
 			end
-			if itm > 1 then
-				itm -= .1
-			end
-			task.wait(itm)
+			rounds += 1
+			task.wait(5)
 		end
 
 		if remaining == 1 then
 			local winner = randomElement(joined)
 			declare(`{winner.DisplayName} won ! ! !`)
+		elseif survival then
+			local record, _ = survivalRecord:ReadAsync(1, true, 0)
+			if not record then
+				record = {
+					rounds = 0,
+					holder = 'Anonymous'
+				}
+			else
+				record = record[1]
+			end
+			declare(`\n{if record.rounds < rounds then '\n' else ''}{survivalplayer.DisplayName} survived for {rounds} rounds ! ! !\n{if record.rounds < rounds then 'NEW RECORD\n' else ''}World record: {record.rounds} by {record.holder}`)
+			if rounds > record.rounds then
+				survivalRecord:AddAsync({
+					rounds = rounds,
+					holder = `{survivalplayer.DisplayName} ({survivalplayer.Name})`
+				}, 3888000)
+			end
 		else
 			declare('Everyone died...')
 		end
