@@ -48,30 +48,45 @@ end
 local playerEvents: { PlayerEvent } = {
 	{
 		text = '%s will be accelerated',
+		condition = function(player: Player)
+			return true
+		end,
 		run = function(player: Player)
-			player.Character.Humanoid.WalkSpeed *= 5
+			player.Character.Humanoid.WalkSpeed *= math.random() * 4 + 1
 		end
 	},
 	{
 		text = '%s will be decelerated',
+		condition = function(player: Player)
+			return true
+		end,
 		run = function(player: Player)
-			player.Character.Humanoid.WalkSpeed *= .2
+			player.Character.Humanoid.WalkSpeed *= math.random()
 		end
 	},
 	{
 		text = '%s will jump better',
+		condition = function(player: Player)
+			return player.Character.Humanoid.JumpPower ~= 100
+		end,
 		run = function(player: Player)
 			player.Character.Humanoid.JumpPower = 100
 		end
 	},
 	{
 		text = '%s wont jump',
+		condition = function(player: Player)
+			return player.Character.Humanoid.JumpPower ~= 0
+		end,
 		run = function(player: Player)
 			player.Character.Humanoid.JumpPower = 0
 		end
 	},
 	{
 		text = '%s will be given a device',
+		condition = function(player: Player)
+			return not (player.Character:FindFirstChild('Device') or player.Backpack:FindFirstChild('Device'))
+		end,
 		run = function(player: Player)
 			local advantages = {
 				{
@@ -115,7 +130,10 @@ local playerEvents: { PlayerEvent } = {
 		end
 	},
 	{
-		text = '%s will be given blast protection',
+		text = '%s will be given protection',
+		condition = function(player: Player)
+			return not player.Character:FindFirstChildWhichIsA('ForceField')
+		end,
 		run = function(player: Player)
 			Instance.new('ForceField', player.Character)
 		end
@@ -124,6 +142,9 @@ local playerEvents: { PlayerEvent } = {
 local platformEvents: { PlatformEvent } = {
 	{
 		text = '%s platform will expand by %.1f studs horizontally',
+		condition = function(platform: Part)
+			return platform and (platform.Parent ~= nil)
+		end,
 		run = function(platform: Part)
 			local qty = math.random() * 10 - 5
 			if platform.Size.X < -qty then
@@ -136,6 +157,9 @@ local platformEvents: { PlatformEvent } = {
 	},
 	{
 		text = '%s platform will expand by %.1f studs vertically',
+		condition = function(platform: Part)
+			return platform and (platform.Parent ~= nil)
+		end,
 		run = function(platform: Part)
 			local qty = math.random() * 1.8 - 0.9
 			if platform.Size.Y < -qty then
@@ -148,6 +172,9 @@ local platformEvents: { PlatformEvent } = {
 	},
 	{
 		text = '%s platform will be raised by %.1f studs',
+		condition = function(platform: Part)
+			return platform and (platform.Parent ~= nil)
+		end,
 		run = function(platform: Part)
 			local qty = math.random() * 20 - 10
 			local tween = TweenService:Create(platform, TweenInfo.new(math.random() * 20), {
@@ -160,6 +187,9 @@ local platformEvents: { PlatformEvent } = {
 	},
 	{
 		text = '%s platform will fade',
+		condition = function(platform: Part)
+			return platform and (platform.Parent ~= nil)
+		end,
 		run = function(platform: Part)
 			local qty = math.random() * 30
 			local tween = TweenService:Create(platform, TweenInfo.new(qty), {
@@ -177,6 +207,9 @@ local platformEvents: { PlatformEvent } = {
 	},
 	{
 		text = '%s platform will become %s',
+		condition = function(platform: Part)
+			return platform and (platform.Parent ~= nil)
+		end,
 		run = function(platform: Part)
 			local factor = math.random(1, 5)
 			local types: { PlateType } = {
@@ -234,6 +267,9 @@ local platformEvents: { PlatformEvent } = {
 	},
 	{
 		text = '%s platform will leave',
+		condition = function(platform: Part)
+			return (platform.Parent ~= nil) and platform
+		end,
 		run = function(platform: Part)
 			local dir = Vector3.new(math.random() * 2 - 1, math.random() * 2 - 1, math.random() * 2 - 1)
 			local tween = TweenService:Create(platform, TweenInfo.new(1000 / math.random()), {
@@ -245,12 +281,19 @@ local platformEvents: { PlatformEvent } = {
 	},
 	{
 		text = '%s platform will be cleared',
+		condition = function(platform: Part)
+			print(platform, platform.Parent, #platform:GetChildren())
+			return platform and (platform.Parent ~= nil) and (#platform:GetChildren() > 0)
+		end,
 		run = function(platform: Part)
 			platform:ClearAllChildren()
 		end
 	},
 	{
 		text = '%s will gain control of their platform',
+		condition = function(platform: Part)
+			return platform and (platform.Parent ~= nil) and (not platform:FindFirstChildWhichIsA('VehicleSeat'))
+		end,
 		run = function(platform: Part)
 			local seat = Instance.new('VehicleSeat')
 			seat.Size = Vector3.one * 2
@@ -268,6 +311,9 @@ local platformEvents: { PlatformEvent } = {
 	},
 	{
 		text = '%s will be given a new platform',
+		condition = function(platform: Part)
+			return true
+		end,
 		run = function(platform: Part)
 			for _, tween in next, ptweens do
 				if tween.Instance == platform then
@@ -275,6 +321,9 @@ local platformEvents: { PlatformEvent } = {
 				end
 			end
 			platform.BrickColor = BrickColor.random()
+			platform.Size = Vector3.new(8, 1, 8)
+			platform.Transparency = 0
+			platform:ClearAllChildren()
 			platform.Parent = script
 		end
 	}
@@ -379,15 +428,21 @@ while true do
 
 		local itm = 4
 		while remaining > (if survival then 0 else 1) do
-			local t = if math.random() < .4 then 'player' else 'platform'
-			if t == 'player' then
-				local event = randomElement(playerEvents)
-				local player = randomElement(joined)
-				declare(event.text:format(player.DisplayName, event.run(player)))
-			elseif t == 'platform' then
-				local event = randomElement(platformEvents)
-				local platform = randomElement(platforms)
-				declare(event.text:format(platform.Name, event.run(platform)))
+			while true do
+				task.wait()
+				local t = if math.random() < .5 then 'player' else 'platform'
+				if t == 'player' then
+					local player = randomElement(joined)
+					local event = randomElement(playerEvents)
+					if not event.condition(player) then continue end
+					declare(event.text:format(player.DisplayName, event.run(player)))
+				elseif t == 'platform' then
+					local platform = randomElement(platforms)
+					local event = randomElement(platformEvents)
+					if not event.condition(platform) then continue end
+					declare(event.text:format(platform.Name, event.run(platform)))
+				end
+				break
 			end
 			if itm > 1 then
 				itm -= .1
