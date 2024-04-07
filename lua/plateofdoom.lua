@@ -331,15 +331,36 @@ local platformEvents: { PlatformEvent } = {
 	}
 }
 
+local autojoined = {}
+
 while true do
 	local err = xpcall(function()
 		local conns: { RBXScriptConnection } = {}
-		local joined: { Player } = {}
+		local joined: { Player } = table.clone(autojoined)
 		for i, player in next, Players:GetPlayers() do
 			conns[i] = player.Chatted:Connect(function(message)
 				if message == 'p%join' then
-					table.insert(joined, player)
-					conns[i]:Disconnect()
+					local i = table.find(joined,player)
+					if not i then
+						table.insert(joined, player)
+					end
+				elseif message == "p%leave" then
+					local i = table.find(joined,player)
+					if i then
+						table.remove(joined,i)
+					end
+				elseif message == 'p%auto' then
+					local i = table.find(joined,player)
+					if not i then
+						table.insert(joined, player)
+					end
+
+					local i = table.find(autojoined,player)
+					if not i then
+						table.insert(autojoined, player)
+					else
+						table.remove(autojoined, i)
+					end
 				end
 			end)
 		end
@@ -349,13 +370,20 @@ while true do
 				table.remove(joined, i)
 			end
 		end)
-		for i = 25, 1, -1 do
+		local i = 25
+		local skipConn = owner.Chatted:Connect(function(h)
+			if h == "p%skip" then
+				i = 0
+			end
+		end)
+		while i > 0 do
 			local roster = ""
 			for _, player in ipairs(joined) do
 				roster ..= player.DisplayName .. '\n'
 			end
 			declare(`{('\n'):rep(#joined)}\ngithub.com/fofl12/sk - Starting the plate of the doom in {i} seconds - Say p%join to join\n{roster}`)
 			task.wait(1)
+			i -= 1
 		end
 		leftConn:Disconnect()
 		for _, conn in next, conns do
@@ -363,6 +391,7 @@ while true do
 				conn:Disconnect()
 			end
 		end
+		skipConn:Disconnect()
 
 		local ingame = true
 		local platforms: { Part } = {}
