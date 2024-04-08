@@ -1,4 +1,8 @@
 --!strict
+--[[
+	Icons owned by Google: https://github.com/google/material-design-icons
+	License: http://www.apache.org/licenses/LICENSE-2.0 (Apache License 2.0)
+]]
 
 type PlatformEvent = {
 	text: string,
@@ -28,12 +32,49 @@ local survivalRecord = MemoryStoreService:GetQueue('github.com/fofl12/sk - plate
 local _spawn = Instance.new('SpawnLocation', script)
 _spawn.Anchored = true
 
-local _message = Instance.new('Hint', script)
-local function declare(message: string)
-	if not _message then 
-		_message = Instance.new('Hint', script)
+local hats = {
+	30845203,
+	2309346267,
+	4819740796,
+	5549581794,
+	2506365681,
+	8136940617,
+	6763676405
+}
+local icons = {
+	6023565902,
+	6022668893,
+	6031079152,
+	6023426904,
+	6023565896,
+	6023426901,
+	6022668882,
+	6023426925,
+	6023426951,
+	6022668876,
+	6026568224,
+	6031289442,
+	6026568239,
+	6022668951,
+	6023426944,
+	6023426938,
+	6026568202,
+	6031280896,
+	6031289446
+}
+local ownericon = 'rbxassetid://17069106011'
+
+local _gmessage: Hint = Instance.new('Hint', script)
+local function gdeclare(message: string)
+	_gmessage.Text = message
+end
+
+local _ltargets = {}
+local function ldeclare(message: string)
+	for _, target in next, _ltargets do
+		if not target then continue end
+		target.Text = message
 	end
-	_message.Text = message
 end
 
 function getChatColor(user: string): Color3
@@ -329,7 +370,7 @@ local platformEvents: { PlatformEvent } = {
 					name = 'bouncy',
 					color = BrickColor.Black(),
 					run = function(part: Part)
-						platform.Velocity = Vector3.new(0, factora * 10, 0)
+						platform.Velocity = Vector3.new(0, factora * 100, 0)
 					end
 				},
 				{
@@ -379,7 +420,7 @@ local platformEvents: { PlatformEvent } = {
 			local seat = Instance.new('VehicleSeat')
 			seat.Size = Vector3.one * 2
 			seat.Anchored = true
-			seat.BrickColor = platform.BrickColor
+			seat.Color = platform:GetAttribute('originColor')
 			seat.Parent = platform
 			task.spawn(function()
 				while platform and seat do
@@ -402,6 +443,8 @@ local platformEvents: { PlatformEvent } = {
 				end
 			end
 			platform.Size = Vector3.new(8, 1, 8)
+			platform.Color = platform:GetAttribute('originColor')
+			platform.Velocity = Vector3.zero
 			platform.Transparency = 0
 			platform:ClearAllChildren()
 			platform.Parent = script
@@ -412,6 +455,10 @@ local platformEvents: { PlatformEvent } = {
 local autojoined = {}
 
 while true do
+	for _, hint in next, _ltargets do
+		if not hint then continue end
+		hint:Destroy()
+	end
 	local err = xpcall(function()
 		local conns: { RBXScriptConnection } = {}
 		local joined: { Player } = table.clone(autojoined)
@@ -454,12 +501,13 @@ while true do
 				i = 0
 			end
 		end)
+		_gmessage.Parent = script
 		while i > 0 do
 			local roster = ""
 			for _, player in ipairs(joined) do
 				roster ..= player.DisplayName .. '\n'
 			end
-			declare(`{('\n'):rep(#joined)}\ngithub.com/fofl12/sk - Starting the plate of the doom in {i} seconds - Say p%join or p%auto to join\n{roster}`)
+			gdeclare(`{('\n'):rep(#joined)}\ngithub.com/fofl12/sk - Starting the plate of the doom in {i} seconds - Say p%join or p%auto to join\n{roster}`)
 			task.wait(1)
 			i -= 1
 		end
@@ -470,6 +518,7 @@ while true do
 			end
 		end
 		skipConn:Disconnect()
+		_gmessage.Parent = nil
 
 		local ingame = true
 		local platforms: { Part } = {}
@@ -486,11 +535,21 @@ while true do
 		local aliveConns = {}
 		local remaining = 0
 		for i, player in next, joined do
-			player:LoadCharacter()
+			local humdesc = Players:GetHumanoidDescriptionFromOutfitId(2913007835)
+			humdesc.Face = Players:GetHumanoidDescriptionFromUserId(player.UserId).Face
+			humdesc.HatAccessory = tostring(randomElement(hats))
+			local color = getChatColor(player.Name)
+			humdesc.TorsoColor = color
+			humdesc.LeftLegColor = color
+			humdesc.RightLegColor = color
+			player:LoadCharacterWithHumanoidDescription(humdesc)
 			if not player.Character then player.CharacterAdded:Wait() end
 			if player.Character:FindFirstChild('Health') then
 				player.Character.Health:Destroy()
 			end
+			local decal = Instance.new('Decal')
+			decal.Texture = if player == owner then ownericon else `rbxassetid://{randomElement(icons)}`
+			decal.Parent = player.Character.Torso
 			player.Character.Humanoid.WalkSpeed = 0
 			task.delay(3, function()
 				player.Character.Humanoid.WalkSpeed = 16
@@ -500,6 +559,7 @@ while true do
 				rem(i)
 				remaining -= 1
 			end)
+			_ltargets[i] = Instance.new('Hint', player.PlayerGui)
 			task.spawn(function()
 				while task.wait(1) do
 					if not alive.Connected then return end
@@ -521,6 +581,7 @@ while true do
 			local new = Instance.new('Part')
 			new.Anchored = true
 			new.Color = getChatColor(joined[i].Name)
+			new:SetAttribute('originColor', new.Color)
 			new.Size = Vector3.new(8, 1, 8)
 			new.Position = Vector3.new(0, 50, 0) + Vector3.new(i % w - w / 2, 0, math.floor(i / w) - h / 2) * 14
 			new.Name = joined[i].DisplayName
@@ -529,7 +590,7 @@ while true do
 			joined[i].Character.Head.CFrame = new.CFrame + Vector3.yAxis * 50
 		end
 
-		declare('Starting ' .. (if survival then 'Survival mode' else 'Battle royale mode'))
+		ldeclare('Starting ' .. (if survival then 'Survival mode' else 'Battle royale mode'))
 		task.wait(3)
 
 		local rounds = 0
@@ -543,14 +604,14 @@ while true do
 					local event = randomElement(playerEvents)
 					if prevEvent == event then continue end
 					if not event.condition(player) then continue end
-					declare(event.text:format(player.DisplayName, event.run(player)))
+					ldeclare(event.text:format(player.DisplayName, event.run(player)))
 					prevEvent = event
 				elseif t == 'platform' then
 					local platform = randomElement(platforms)
 					local event = randomElement(platformEvents)
 					if prevEvent == event then continue end
 					if not event.condition(platform) then continue end
-					declare(event.text:format(platform.Name, event.run(platform)))
+					ldeclare(event.text:format(platform.Name, event.run(platform)))
 					prevEvent = event
 				end
 				break
@@ -561,7 +622,7 @@ while true do
 
 		if remaining == 1 then
 			local winner = randomElement(joined)
-			declare(`{winner.DisplayName} won ! ! !`)
+			ldeclare(`{winner.DisplayName} won ! ! !`)
 		elseif survival then
 			local record, _ = survivalRecord:ReadAsync(1, true, 0)
 			if not record then
@@ -572,7 +633,7 @@ while true do
 			else
 				record = record[1]
 			end
-			declare(`\n{if record.rounds < rounds then '\n' else ''}{survivalplayer.DisplayName} survived for {rounds} rounds ! ! !\n{if record.rounds < rounds then 'NEW RECORD\n' else ''}World record: {record.rounds} by {record.holder}`)
+			ldeclare(`\n{if record.rounds < rounds then '\n' else ''}{survivalplayer.DisplayName} survived for {rounds} rounds ! ! !\n{if record.rounds < rounds then 'NEW RECORD\n' else ''}World record: {record.rounds} by {record.holder}`)
 			if rounds > record.rounds then
 				survivalRecord:AddAsync({
 					rounds = rounds,
@@ -580,7 +641,7 @@ while true do
 				}, 3888000)
 			end
 		else
-			declare('Everyone died...')
+			ldeclare('Everyone died...')
 		end
 
 		ingame = false
@@ -597,8 +658,8 @@ while true do
 	end)
 	if not err then
 		script:ClearAllChildren()
-		_message = Instance.new('Hint', script)
-		declare('Restarting because of error')
+		_gmessage = Instance.new('Hint', script)
+		gdeclare('Restarting because of error')
 		task.wait(5)
 	end
 end
