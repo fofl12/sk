@@ -234,6 +234,29 @@ local playerEvents: { PlayerEvent } = {
 							c.Head.Anchored = false
 						end)
 					end
+				},
+				{
+					name = 'With modern technological advancements, it is now possible to summon Portable trampoline !',
+					run = function(c: Character)
+						local new = Instance.new('Part')
+						new.Size = Vector3.new(5, 1, 5)
+						new.Anchored = true
+						new.BrickColor = BrickColor.Black()
+						new.Position = c.Head.Position - Vector3.yAxis * 8
+						new.AssemblyLinearVelocity = Vector3.yAxis * 200
+						new.Parent = script
+						Debris:AddItem(new, 10)
+					end
+				},
+				{
+					name = 'KABOOM',
+					run = function(c: Character)
+						local ff = Instance.new('ForceField', c)
+						local x = Instance.new('Explosion')
+						x.Position = c.Head.Position
+						x.Parent = c.Head
+						Debris:AddItem(ff, 1)
+					end
 				}
 			}
 			local new = Instance.new('Tool')
@@ -336,7 +359,7 @@ local platformEvents: { PlatformEvent } = {
 			return platform and (platform.Parent ~= nil)
 		end,
 		run = function(platform: Part)
-			local qty = math.random() * 30
+			local qty = math.random() * 30 + 5
 			local tween = TweenService:Create(platform, TweenInfo.new(qty), {
 				Transparency = 1
 			})
@@ -572,7 +595,9 @@ while true do
 			end
 			joined[i] = nil
 			if platforms[i] then
-				platforms[i]:Destroy()
+				platforms[i].Transparency = 0.5
+				platforms[i].BrickColor = BrickColor.Red()
+				Debris:AddItem(platforms[i], 3)
 			end
 			platforms[i] = nil
 		end
@@ -664,9 +689,15 @@ while true do
 			task.wait(5)
 		end
 
+		for _, target in next, _ltargets do
+			if not target then continue end
+			target:Destroy()
+		end
+
+		_gmessage = Instance.new('Hint', script)
 		if remaining == 1 then
 			local winner = randomElement(joined)
-			ldeclare(`{winner.DisplayName} won ! ! !`)
+			gdeclare(`{winner.DisplayName} won ! ! !`)
 		elseif survival then
 			local record, _ = survivalRecord:ReadAsync(1, true, 0)
 			if not record then
@@ -677,7 +708,7 @@ while true do
 			else
 				record = record[1]
 			end
-			ldeclare(`\n{if record.rounds < rounds then '\n' else ''}{survivalplayer.DisplayName} survived for {rounds} rounds ! ! !\n{if record.rounds < rounds then 'NEW RECORD\n' else ''}World record: {record.rounds} by {record.holder}`)
+			gdeclare(`\n{if record.rounds < rounds then '\n' else ''}{survivalplayer.DisplayName} survived for {rounds} rounds ! ! !\n{if record.rounds < rounds then 'NEW RECORD\n' else ''}World record: {record.rounds} by {record.holder}`)
 			if rounds > record.rounds then
 				survivalRecord:AddAsync({
 					rounds = rounds,
@@ -685,7 +716,7 @@ while true do
 				}, 3888000)
 			end
 		else
-			ldeclare('Everyone died...')
+			gdeclare('Everyone died...')
 		end
 
 		ingame = false
