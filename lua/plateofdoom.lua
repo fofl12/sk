@@ -17,11 +17,13 @@ end
 
 type PlatformEvent = {
 	text: string,
+	command: string,
 	run: (platform: Part) -> ...any,
 	condition: (platform: Part) -> boolean,
 }
 type PlayerEvent = {
 	text: string,
+	command: string,
 	run: (player: PlayerAug) -> ...any,
 	condition: (player: PlayerAug) -> boolean,
 }
@@ -41,6 +43,8 @@ local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local MemoryStoreService = game:GetService("MemoryStoreService")
 local Debris = game:GetService("Debris")
+local Chat = game:GetService("Chat")
+
 local survivalRecord = MemoryStoreService:GetQueue('github.com/fofl12/sk - plateofdoom.lua', 1)
 
 local _spawn = Instance.new('SpawnLocation', script)
@@ -173,6 +177,7 @@ local ptweens: { Tween } = {}
 local playerEvents: { PlayerEvent } = {
 	{
 		text = '%s will be accelerated',
+		command = 'speedup',
 		condition = function(player: PlayerAug)
 			return true
 		end,
@@ -182,6 +187,7 @@ local playerEvents: { PlayerEvent } = {
 	},
 	{
 		text = '%s will be decelerated',
+		command = 'slowdown',
 		condition = function(player: PlayerAug)
 			return true
 		end,
@@ -191,6 +197,7 @@ local playerEvents: { PlayerEvent } = {
 	},
 	{
 		text = '%s will jump better',
+		command = 'superjump',
 		condition = function(player: PlayerAug)
 			return player.Character.Humanoid.JumpPower ~= 100
 		end,
@@ -200,6 +207,7 @@ local playerEvents: { PlayerEvent } = {
 	},
 	{
 		text = '%s wont jump',
+		command = 'nojump',
 		condition = function(player: PlayerAug)
 			return player.Character.Humanoid.JumpPower ~= 0
 		end,
@@ -209,6 +217,7 @@ local playerEvents: { PlayerEvent } = {
 	},
 	{
 		text = '%s will be given a device',
+		command = 'device',
 		condition = function(player: PlayerAug)
 			return not (player.Character:FindFirstChild('Device') or player.Backpack:FindFirstChild('Device'))
 		end,
@@ -243,8 +252,8 @@ local playerEvents: { PlayerEvent } = {
 						new.Anchored = true
 						new.BrickColor = BrickColor.Black()
 						new.Position = c.Head.Position - Vector3.yAxis * 8
-						new.AssemblyLinearVelocity = Vector3.yAxis * 200
 						new.Parent = script
+						new.AssemblyLinearVelocity = Vector3.yAxis * 200
 						Debris:AddItem(new, 10)
 					end
 				},
@@ -279,6 +288,7 @@ local playerEvents: { PlayerEvent } = {
 	},
 	{
 		text = '%s will be given protection for %i seconds',
+		command = 'protect',
 		condition = function(player: PlayerAug)
 			return not player.Character:FindFirstChildWhichIsA('ForceField')
 		end,
@@ -292,6 +302,7 @@ local playerEvents: { PlayerEvent } = {
 local platformEvents: { PlatformEvent } = {
 	{
 		text = '%s platform will expand by %.1f studs horizontally',
+		command = 'hexpand',
 		condition = function(platform: Part)
 			return platform and (platform.Parent ~= nil)
 		end,
@@ -316,6 +327,7 @@ local platformEvents: { PlatformEvent } = {
 	},
 	{
 		text = '%s platform will expand by %.1f studs vertically',
+		command = 'vexpand',
 		condition = function(platform: Part)
 			return platform and (platform.Parent ~= nil)
 		end,
@@ -340,6 +352,7 @@ local platformEvents: { PlatformEvent } = {
 	},
 	{
 		text = '%s platform will be raised by %.1f studs',
+		command = 'raise',
 		condition = function(platform: Part)
 			return platform and (platform.Parent ~= nil)
 		end,
@@ -355,6 +368,7 @@ local platformEvents: { PlatformEvent } = {
 	},
 	{
 		text = '%s platform will fade',
+		command = 'fade',
 		condition = function(platform: Part)
 			return platform and (platform.Parent ~= nil)
 		end,
@@ -375,6 +389,7 @@ local platformEvents: { PlatformEvent } = {
 	},
 	{
 		text = '%s platform will become %s',
+		command = 'transform',
 		condition = function(platform: Part)
 			return platform and (platform.Parent ~= nil)
 		end,
@@ -453,6 +468,7 @@ local platformEvents: { PlatformEvent } = {
 	},
 	{
 		text = '%s platform will leave',
+		command = 'leave',
 		condition = function(platform: Part)
 			return platform and (platform.Parent ~= nil) -- ????????!??!?!?!?!!?!??!?!?!?!!
 		end,
@@ -467,8 +483,8 @@ local platformEvents: { PlatformEvent } = {
 	},
 	{
 		text = '%s platform will be cleared',
+		command = 'clear',
 		condition = function(platform: Part)
-			print(platform, platform.Parent, #platform:GetChildren())
 			return platform and (platform.Parent ~= nil) and (#platform:GetChildren() > 0)
 		end,
 		run = function(platform: Part)
@@ -477,6 +493,7 @@ local platformEvents: { PlatformEvent } = {
 	},
 	{
 		text = '%s will gain control of their platform',
+		command = 'control',
 		condition = function(platform: Part)
 			return platform and (platform.Parent ~= nil) and (not platform:FindFirstChildWhichIsA('VehicleSeat'))
 		end,
@@ -497,6 +514,7 @@ local platformEvents: { PlatformEvent } = {
 	},
 	{
 		text = '%s will be given a new platform',
+		command = 'newplatform',
 		condition = function(platform: Part)
 			return true
 		end,
@@ -574,7 +592,7 @@ while true do
 			for _, player in ipairs(joined) do
 				roster ..= player.DisplayName .. '\n'
 			end
-			gdeclare(`{('\n'):rep(#joined)}\ngithub.com/fofl12/sk - Starting the plate of the doom in {i} seconds - Say p%join or p%auto to join\n{roster}`)
+			gdeclare(`{('\n'):rep(#joined)}\n\ngithub.com/fofl12/sk - Starting the plate of the doom in {i} seconds - Say p%join or p%auto to join\nWant to choose which events happen? Join comsurg's group and purchase the stakeholder t-shirt for 12 robux!\n{roster}`)
 			task.wait(1)
 			i -= 1
 		end
@@ -604,6 +622,8 @@ while true do
 		local aliveConns = {}
 		local chatConns = {}
 		local remaining = 0
+		local nextEvent: PlayerEvent | PlatformEvent = nil
+		local nextEventType: string = nil
 		for i, player in next, joined do
 			local humdesc = Players:GetHumanoidDescriptionFromOutfitId(2913007835)
 			humdesc.Face = Players:GetHumanoidDescriptionFromUserId(player.UserId).Face
@@ -639,6 +659,27 @@ while true do
 				alive:Disconnect()
 				remaining -= 1
 			end)
+			local stakeholder = player:GetRankInGroup(8468419) >= 110
+			chatConns[i] = player.Chatted:Connect(function(message: string)
+				if not player.Character then return end
+				Chat:Chat(player.Character, message)
+				if not stakeholder then return end
+				if message:sub(1, 8):lower() == 'p%event ' and #message > 9 then
+					local name = message:sub(9, -1):lower()
+					for _, event in next, playerEvents do
+						if event.command == name then
+							nextEvent = event
+							nextEventType = 'player'
+						end
+					end
+					for _, event in next, platformEvents do
+						if event.command == name then
+							nextEvent = event
+							nextEventType = 'platform'
+						end
+					end
+				end
+			end)
 			aliveConns[i] = alive
 			remaining += 1
 		end
@@ -668,16 +709,22 @@ while true do
 			while true do
 				task.wait()
 				local t = if math.random() < .5 then 'player' else 'platform'
+				local forced = false
+				if nextEventType ~= nil then
+					t = nextEventType
+					nextEventType = nil
+					forced = true
+				end
 				if t == 'player' then
 					local player = randomElement(joined)
-					local event = randomElement(playerEvents)
+					local event = if forced then nextEvent else randomElement(playerEvents)
 					if prevEvent == event then continue end
 					if not event.condition(player) then continue end
 					ldeclare(event.text:format(player.DisplayName, event.run(player)))
 					prevEvent = event
 				elseif t == 'platform' then
 					local platform = randomElement(platforms)
-					local event = randomElement(platformEvents)
+					local event = if forced then nextEvent else randomElement(platformEvents)
 					if prevEvent == event then continue end
 					if not event.condition(platform) then continue end
 					ldeclare(event.text:format(platform.Name, event.run(platform)))
@@ -721,11 +768,15 @@ while true do
 
 		ingame = false
 		for _, conn in next, aliveConns do
+			if not conn.Connected then continue end
 			conn:Disconnect()
 		end
-		for _, platform in next, platforms do
-			platform:Destroy()
+		for _, conn in next, chatConns do
+			if not conn.Connected then continue end
+			conn:Disconnect()
 		end
+		script:ClearAllChildren()
+		_gmessage = Instance.new('Hint')
 
 		task.wait(5)
 	end, function(...)
