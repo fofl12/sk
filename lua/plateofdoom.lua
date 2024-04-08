@@ -1,23 +1,37 @@
 --!strict
 --[[
+	plateofdoom.lua
+	Copyright 2024 fofl12 (comsurg (h)) BSD 3-clause New License
+	github.com/fofl12/sk
+	Hopefully compatible with non VSB-like environments
+
 	Icons owned by Google: https://github.com/google/material-design-icons
 	License: http://www.apache.org/licenses/LICENSE-2.0 (Apache License 2.0)
 ]]
 
+-- non VSB-like compatibility
+local owner: Player? = nil
+if getfenv().owner then 
+	owner = getfenv().owner
+end
+
 type PlatformEvent = {
 	text: string,
-	run: (platform: Part) -> any,
+	run: (platform: Part) -> ...any,
 	condition: (platform: Part) -> boolean,
 }
 type PlayerEvent = {
 	text: string,
-	run: (player: Player) -> any,
-	condition: (player: Player) -> boolean,
+	run: (player: PlayerAug) -> ...any,
+	condition: (player: PlayerAug) -> boolean,
 }
-type Character = {
+type Character = Model & {
 	Humanoid: Humanoid,
-	Head: Part
+	Head: Part,
+	Health: Script?,
+	Torso: Part
 }
+type PlayerAug = Player & { Character: Character, Backpack: StarterPack, PlayerGui: PlayerGui } -- ?!?!?
 type PlateType = {
 	name: string,
 	run: (part: Part) -> nil
@@ -42,25 +56,50 @@ local hats = {
 	6763676405
 }
 local icons = {
-	6023565902,
-	6022668893,
-	6031079152,
-	6023426904,
-	6023565896,
-	6023426901,
-	6022668882,
-	6023426925,
-	6023426951,
-	6022668876,
-	6026568224,
-	6031289442,
+	6023565902, 6031154875,
+	6022668893, 6031280889,
+	6031079152, 6031225842,
+	6023426904, 6031289446,
+	6023565896, 6022668961,
+	6023426901, 6026568266,
+	6022668882, 6023426942,
+	6023426925, 6031154859,
+	6023426951, 6031154866,
+	6022668876, 6022668917,
+	6026568224, 6026568210,
+	6031289442, 6022668888,
+	6026568239, 6022668899,
+	6022668951, 6031154857,
+	6023426944, 6031233833,
+	6023426938, 6022668892,
+	6026568202, 6031225831,
+	6031280896, 6031289461,
+	6031289446, 6023426926,
+	6023426930, 6022668900,
+	6026568249, 6031260776,
+	6026568199, 6031260782,
+	6031289442, 6031079172,
+	6026568196, 6031154871,
+	6026568253, 
+	6031075929,
+	6023426905,
+	6022668963,
+	6026568237,
+	6031265965,
 	6026568239,
-	6022668951,
-	6023426944,
-	6023426938,
-	6026568202,
+	6031260778,
+	6026568216,
+	6031084749,
+	6031229335,
+	6023426910,
 	6031280896,
-	6031289446
+	6026568189,
+	6031251505,
+	6031233847,
+	6023426931,
+	6031265970,
+	6022668879,
+	6023565894,
 }
 local ownericon = 'rbxassetid://17069106011'
 
@@ -69,7 +108,7 @@ local function gdeclare(message: string)
 	_gmessage.Text = message
 end
 
-local _ltargets = {}
+local _ltargets: { Hint } = {}
 local function ldeclare(message: string)
 	for _, target in next, _ltargets do
 		if not target then continue end
@@ -79,37 +118,37 @@ end
 
 function getChatColor(user: string): Color3
 	local CHAT_COLORS =
-	{
-		Color3.new(253/255, 41/255, 67/255), -- BrickColor.new("Bright red").Color,
-		Color3.new(1/255, 162/255, 255/255), -- BrickColor.new("Bright blue").Color,
-		Color3.new(2/255, 184/255, 87/255), -- BrickColor.new("Earth green").Color,
-		BrickColor.new("Bright violet").Color,
-		BrickColor.new("Bright orange").Color,
-		BrickColor.new("Bright yellow").Color,
-		BrickColor.new("Light reddish violet").Color,
-		BrickColor.new("Brick yellow").Color,
-	}
+		{
+			Color3.new(253/255, 41/255, 67/255), -- BrickColor.new("Bright red").Color,
+			Color3.new(1/255, 162/255, 255/255), -- BrickColor.new("Bright blue").Color,
+			Color3.new(2/255, 184/255, 87/255), -- BrickColor.new("Earth green").Color,
+			BrickColor.new("Bright violet").Color,
+			BrickColor.new("Bright orange").Color,
+			BrickColor.new("Bright yellow").Color,
+			BrickColor.new("Light reddish violet").Color,
+			BrickColor.new("Brick yellow").Color,
+		}
 
-		local function GetNameValue(pName)
-			local value = 0
-			for index = 1, #pName do
-				local cValue = string.byte(string.sub(pName, index, index))
-				local reverseIndex = #pName - index + 1
-				if #pName%2 == 1 then
-					reverseIndex = reverseIndex - 1
-				end
-				if reverseIndex%4 >= 2 then
-					cValue = -cValue
-				end
-				value = value + cValue
+	local function GetNameValue(pName)
+		local value = 0
+		for index = 1, #pName do
+			local cValue = string.byte(string.sub(pName, index, index))
+			local reverseIndex = #pName - index + 1
+			if #pName%2 == 1 then
+				reverseIndex = reverseIndex - 1
 			end
-			return value
+			if reverseIndex%4 >= 2 then
+				cValue = -cValue
+			end
+			value = value + cValue
 		end
+		return value
+	end
 
 	return CHAT_COLORS[(GetNameValue(user) % #CHAT_COLORS) + 1]
 end
 
-local function randomElement(t: table): any
+local function randomElement(t: {}): any
 	while true do
 		if #t == 0 then return nil end
 		local element = t[math.random(1, #t)]
@@ -121,7 +160,7 @@ end
 
 local function platformbind(signal: RBXScriptSignal, platform: Part): RBXScriptSignal
 	local new = Instance.new('BindableEvent', platform)
-	local connection: RBXScriptConnection
+	local connection: RBXScriptConnection = nil
 	signal:Connect(function(...)
 		if not (new and platform) then connection:Disconnect();return end
 		new:Fire(...)
@@ -134,46 +173,46 @@ local ptweens: { Tween } = {}
 local playerEvents: { PlayerEvent } = {
 	{
 		text = '%s will be accelerated',
-		condition = function(player: Player)
+		condition = function(player: PlayerAug)
 			return true
 		end,
-		run = function(player: Player)
+		run = function(player: PlayerAug)
 			player.Character.Humanoid.WalkSpeed *= math.random() * 4 + 1
 		end
 	},
 	{
 		text = '%s will be decelerated',
-		condition = function(player: Player)
+		condition = function(player: PlayerAug)
 			return true
 		end,
-		run = function(player: Player)
+		run = function(player: PlayerAug)
 			player.Character.Humanoid.WalkSpeed *= math.random()
 		end
 	},
 	{
 		text = '%s will jump better',
-		condition = function(player: Player)
+		condition = function(player: PlayerAug)
 			return player.Character.Humanoid.JumpPower ~= 100
 		end,
-		run = function(player: Player)
+		run = function(player: PlayerAug)
 			player.Character.Humanoid.JumpPower = 100
 		end
 	},
 	{
 		text = '%s wont jump',
-		condition = function(player: Player)
+		condition = function(player: PlayerAug)
 			return player.Character.Humanoid.JumpPower ~= 0
 		end,
-		run = function(player: Player)
+		run = function(player: PlayerAug)
 			player.Character.Humanoid.JumpPower = 0
 		end
 	},
 	{
 		text = '%s will be given a device',
-		condition = function(player: Player)
+		condition = function(player: PlayerAug)
 			return not (player.Character:FindFirstChild('Device') or player.Backpack:FindFirstChild('Device'))
 		end,
-		run = function(player: Player)
+		run = function(player: PlayerAug)
 			local advantages = {
 				{
 					name = 'Possibly gain MaxHealth in the gambling casino!??!?!?!?!?!!!!!!!!!!!',
@@ -217,10 +256,10 @@ local playerEvents: { PlayerEvent } = {
 	},
 	{
 		text = '%s will be given protection for %i seconds',
-		condition = function(player: Player)
+		condition = function(player: PlayerAug)
 			return not player.Character:FindFirstChildWhichIsA('ForceField')
 		end,
-		run = function(player: Player)
+		run = function(player: PlayerAug)
 			local qty = math.random(20, 200)
 			Debris:AddItem(Instance.new('ForceField', player.Character), qty)
 			return qty
@@ -348,7 +387,8 @@ local platformEvents: { PlatformEvent } = {
 					name = 'healthy',
 					color = BrickColor.Green(),
 					run = function(part: Part)
-						local hum = part.Parent:FindFirstChild('Humanoid')
+						if not part.Parent then return end -- wtf.........
+						local hum = part.Parent:FindFirstChildWhichIsA('Humanoid')
 						if not hum then return end
 						if hum.Health == hum.MaxHealth then
 							hum.MaxHealth += factorb / 5
@@ -361,7 +401,8 @@ local platformEvents: { PlatformEvent } = {
 					name = 'violent',
 					color = BrickColor.Red(),
 					run = function(part: Part)
-						local hum = part.Parent:FindFirstChild('Humanoid')
+						if not part.Parent then return end
+						local hum = part.Parent:FindFirstChildWhichIsA('Humanoid')
 						if not hum then return end
 						hum:TakeDamage(factora * 5)
 					end
@@ -370,14 +411,14 @@ local platformEvents: { PlatformEvent } = {
 					name = 'bouncy',
 					color = BrickColor.Black(),
 					run = function(part: Part)
-						platform.Velocity = Vector3.new(0, factora * 100, 0)
+						platform.AssemblyLinearVelocity = Vector3.new(0, factora * 100, 0)
 					end
 				},
 				{
 					name = 'a conveyer belt',
 					color = BrickColor.Black(),
 					run = function(part: Part)
-						platform.Velocity = Vector3.new(factora * 4 - 10, 0, factorb * 4 - 10)
+						platform.AssemblyLinearVelocity = Vector3.new(factora * 4 - 10, 0, factorb * 4 - 10)
 					end
 				}
 			}
@@ -390,7 +431,7 @@ local platformEvents: { PlatformEvent } = {
 	{
 		text = '%s platform will leave',
 		condition = function(platform: Part)
-			return (platform.Parent ~= nil) and platform
+			return platform and (platform.Parent ~= nil) -- ????????!??!?!?!?!!?!??!?!?!?!!
 		end,
 		run = function(platform: Part)
 			local dir = Vector3.new(math.random() * 2 - 1, math.random() * 2 - 1, math.random() * 2 - 1)
@@ -444,7 +485,7 @@ local platformEvents: { PlatformEvent } = {
 			end
 			platform.Size = Vector3.new(8, 1, 8)
 			platform.Color = platform:GetAttribute('originColor')
-			platform.Velocity = Vector3.zero
+			platform.AssemblyLinearVelocity = Vector3.zero
 			platform.Transparency = 0
 			platform:ClearAllChildren()
 			platform.Parent = script
@@ -452,7 +493,7 @@ local platformEvents: { PlatformEvent } = {
 	}
 }
 
-local autojoined = {}
+local autojoined: { PlayerAug } = {}
 
 while true do
 	for _, hint in next, _ltargets do
@@ -461,46 +502,49 @@ while true do
 	end
 	local err = xpcall(function()
 		local conns: { RBXScriptConnection } = {}
-		local joined: { Player } = table.clone(autojoined)
-		for i, player in next, Players:GetPlayers() do
+		local joined: { PlayerAug } = table.clone(autojoined)
+		for i, player: PlayerAug in next, Players:GetPlayers() do
 			conns[i] = player.Chatted:Connect(function(message)
 				if message == 'p%join' then
-					local i = table.find(joined,player)
-					if not i then
+					local j = table.find(joined,player)
+					if not j then
 						table.insert(joined, player)
 					end
 				elseif message == "p%leave" then
-					local i = table.find(joined,player)
-					if i then
+					local j = table.find(joined,player)
+					if j then
 						table.remove(joined,i)
 					end
 				elseif message == 'p%auto' then
-					local i = table.find(joined,player)
-					if not i then
+					local j = table.find(joined,player)
+					if not j then
 						table.insert(joined, player)
 					end
 
-					local i = table.find(autojoined,player)
-					if not i then
+					local j = table.find(autojoined,player)
+					if not j then
 						table.insert(autojoined, player)
 					else
-						table.remove(autojoined, i)
+						table.remove(autojoined, j)
 					end
 				end
 			end)
 		end
-		local leftConn = Players.PlayerRemoving:Connect(function(player: Player)
+		local leftConn = Players.PlayerRemoving:Connect(function(player: PlayerAug)
 			local i = table.find(joined, player)
 			if i then
 				table.remove(joined, i)
 			end
 		end)
 		local i = 25
-		local skipConn = owner.Chatted:Connect(function(h)
-			if h == "p%skip" then
-				i = 0
-			end
-		end)
+		local skipConn: RBXScriptConnection = nil
+		if owner then
+			skipConn = owner.Chatted:Connect(function(h)
+				if h == "p%skip" then
+					i = 0
+				end
+			end)
+		end
 		_gmessage.Parent = script
 		while i > 0 do
 			local roster = ""
@@ -517,7 +561,7 @@ while true do
 				conn:Disconnect()
 			end
 		end
-		skipConn:Disconnect()
+		if skipConn then skipConn:Disconnect() end
 		_gmessage.Parent = nil
 
 		local ingame = true
@@ -533,6 +577,7 @@ while true do
 			platforms[i] = nil
 		end
 		local aliveConns = {}
+		local chatConns = {}
 		local remaining = 0
 		for i, player in next, joined do
 			local humdesc = Players:GetHumanoidDescriptionFromOutfitId(2913007835)
@@ -544,11 +589,10 @@ while true do
 			humdesc.RightLegColor = color
 			player:LoadCharacterWithHumanoidDescription(humdesc)
 			if not player.Character then player.CharacterAdded:Wait() end
-			if player.Character:FindFirstChild('Health') then
-				player.Character.Health:Destroy()
-			end
+			local healthScript: Instance? = player.Character:FindFirstChild('Health')
+			if healthScript then healthScript:Destroy() end
 			local decal = Instance.new('Decal')
-			decal.Texture = if player == owner then ownericon else `rbxassetid://{randomElement(icons)}`
+			decal.Texture = `rbxassetid://{randomElement(icons)}`
 			decal.Parent = player.Character.Torso
 			player.Character.Humanoid.WalkSpeed = 0
 			task.delay(3, function()
