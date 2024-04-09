@@ -7,6 +7,11 @@
 
 	Icons owned by Google: https://github.com/google/material-design-icons
 	License: http://www.apache.org/licenses/LICENSE-2.0 (Apache License 2.0)
+	Uploaded by qwreey74
+
+	Neko cat icon assets owned by Google
+	License: http://www.apache.org/licenses/LICENSE-2.0 (Apache License 2.0)
+	Icon made and uploaded by fofl12
 ]]
 
 -- non VSB-like compatibility
@@ -24,8 +29,8 @@ type PlatformEvent = {
 type PlayerEvent = {
 	text: string,
 	command: string,
-	run: (player: PlayerAug) -> ...any,
-	condition: (player: PlayerAug) -> boolean,
+	run: (player: Playing) -> ...any,
+	condition: (player: Playing) -> boolean,
 }
 type Character = Model & {
 	Humanoid: Humanoid,
@@ -33,10 +38,19 @@ type Character = Model & {
 	Health: Script?,
 	Torso: Part
 }
-type PlayerAug = Player & { Character: Character, Backpack: StarterPack, PlayerGui: PlayerGui } -- ?!?!?
+type Playing = Player & { -- if you know how to do this better, please tell me
+	Character: Character,
+	Backpack: Backpack,
+	PlayerGui: PlayerGui
+}
 type PlateType = {
 	name: string,
+	color: BrickColor,
 	run: (part: Part) -> nil
+}
+type DeviceAdvantage = {
+	name: string,
+	run: (c: Character) -> nil
 }
 
 local Players = game:GetService("Players")
@@ -84,7 +98,7 @@ local icons = {
 	6026568199, 6031260782,
 	6031289442, 6031079172,
 	6026568196, 6031154871,
-	6026568253, 
+	6026568253, 17069106011,
 	6031075929,
 	6023426905,
 	6022668963,
@@ -105,9 +119,8 @@ local icons = {
 	6022668879,
 	6023565894,
 }
-local ownericon = 'rbxassetid://17069106011'
 
-local _gmessage: Hint = Instance.new('Hint', script)
+local _gmessage: Hint = nil
 local function gdeclare(message: string)
 	_gmessage.Text = message
 end
@@ -152,12 +165,11 @@ function getChatColor(user: string): Color3
 	return CHAT_COLORS[(GetNameValue(user) % #CHAT_COLORS) + 1]
 end
 
-local function randomElement(t: {}): any
+local function randomElement<T>(t: { T }): T?
+	if #t == 0 then return end
 	while true do
-		if #t == 0 then return nil end
 		local element = t[math.random(1, #t)]
 		if not element then continue end
-		--if typeof(element) == 'Instance' and element.Parent == nil then return end
 		return element
 	end
 end
@@ -172,57 +184,80 @@ local function platformbind(signal: RBXScriptSignal, platform: Part): RBXScriptS
 	return new.Event
 end
 
+local function charPlaying(char: Instance?): boolean
+	if not (char and char.Parent == workspace and char:IsA('Model')) then return false end
+	local hum: Instance? = char:FindFirstChild('Humanoid')
+	local head: Instance? = char:FindFirstChild('Head')
+	local torso: Instance? = char:FindFirstChild('Torso')
+	if not (head and hum and torso) then return false end
+	if not (hum:IsA('Humanoid') and head:IsA('Part') and torso:IsA('Part')) then return false end
+	if hum.Health <= 0 then return false end
+	return true
+end
+
+local function playerPlaying(player: Playing): boolean
+	local backpack = player:FindFirstChild('Backpack')
+	if not (backpack and backpack:IsA('Backpack')) then return false end
+	for _, tool in next, backpack:GetChildren() do
+		if not tool:GetAttribute('Certifiedbyh') then
+			return false
+		end
+	end
+	if not charPlaying(player.Character) then return false end
+	return true
+end
+
 local ptweens: { Tween } = {}
 
 local playerEvents: { PlayerEvent } = {
 	{
 		text = '%s will be accelerated',
 		command = 'speedup',
-		condition = function(player: PlayerAug)
+		condition = function(player: Playing)
 			return true
 		end,
-		run = function(player: PlayerAug)
+		run = function(player: Playing)
 			player.Character.Humanoid.WalkSpeed *= math.random() * 4 + 1
 		end
 	},
 	{
 		text = '%s will be decelerated',
 		command = 'slowdown',
-		condition = function(player: PlayerAug)
+		condition = function(player: Playing)
 			return true
 		end,
-		run = function(player: PlayerAug)
+		run = function(player: Playing)
 			player.Character.Humanoid.WalkSpeed *= math.random()
 		end
 	},
 	{
 		text = '%s will jump better',
 		command = 'superjump',
-		condition = function(player: PlayerAug)
+		condition = function(player: Playing)
 			return player.Character.Humanoid.JumpPower ~= 100
 		end,
-		run = function(player: PlayerAug)
+		run = function(player: Playing)
 			player.Character.Humanoid.JumpPower = 100
 		end
 	},
 	{
 		text = '%s wont jump',
 		command = 'nojump',
-		condition = function(player: PlayerAug)
+		condition = function(player: Playing)
 			return player.Character.Humanoid.JumpPower ~= 0
 		end,
-		run = function(player: PlayerAug)
+		run = function(player: Playing)
 			player.Character.Humanoid.JumpPower = 0
 		end
 	},
 	{
 		text = '%s will be given a device',
 		command = 'device',
-		condition = function(player: PlayerAug)
+		condition = function(player: Playing)
 			return not (player.Character:FindFirstChild('Device') or player.Backpack:FindFirstChild('Device'))
 		end,
-		run = function(player: PlayerAug)
-			local advantages = {
+		run = function(player: Playing)
+			local advantages: { DeviceAdvantage } = {
 				{
 					name = 'Possibly gain MaxHealth in the gambling casino!??!?!?!?!?!!!!!!!!!!!',
 					run = function(c: Character)
@@ -269,12 +304,13 @@ local playerEvents: { PlayerEvent } = {
 				}
 			}
 			local new = Instance.new('Tool')
+			new:SetAttribute('Certifiedbyh', true) -- truly the best anticheat mechanism
 			new.Name = 'Device'
-			local t = randomElement(advantages)
+			local t = randomElement(advantages) :: DeviceAdvantage
 			new.ToolTip = t.name
 			new.Activated:Connect(function()
 				local c = new.Parent
-				t.run(c)
+				if charPlaying(c) then t.run(c :: Character) end
 				new:Destroy()
 			end)
 			local handle = Instance.new('Part')
@@ -289,10 +325,10 @@ local playerEvents: { PlayerEvent } = {
 	{
 		text = '%s will be given protection for %i seconds',
 		command = 'protect',
-		condition = function(player: PlayerAug)
+		condition = function(player: Playing)
 			return not player.Character:FindFirstChildWhichIsA('ForceField')
 		end,
-		run = function(player: PlayerAug)
+		run = function(player: Player)
 			local qty = math.random(20, 200)
 			Debris:AddItem(Instance.new('ForceField', player.Character), qty)
 			return qty
@@ -460,7 +496,7 @@ local platformEvents: { PlatformEvent } = {
 					end
 				}
 			}
-			local t = randomElement(types)
+			local t = randomElement(types) :: PlateType
 			platform.BrickColor = t.color
 			platformbind(platform.Touched, platform):Connect(t.run)
 			return t.name
@@ -534,7 +570,7 @@ local platformEvents: { PlatformEvent } = {
 	}
 }
 
-local autojoined: { PlayerAug } = {}
+local autojoined: { Player } = {}
 
 while true do
 	for _, hint in next, _ltargets do
@@ -543,8 +579,8 @@ while true do
 	end
 	local err = xpcall(function()
 		local conns: { RBXScriptConnection } = {}
-		local joined: { PlayerAug } = table.clone(autojoined)
-		for i, player: PlayerAug in next, Players:GetPlayers() do
+		local joined: { Player } = table.clone(autojoined)
+		for i, player: Player in next, Players:GetPlayers() do
 			conns[i] = player.Chatted:Connect(function(message)
 				if message == 'p%join' then
 					local j = table.find(joined,player)
@@ -562,16 +598,16 @@ while true do
 						table.insert(joined, player)
 					end
 
-					local j = table.find(autojoined,player)
-					if not j then
+					local k = table.find(autojoined,player)
+					if not k then
 						table.insert(autojoined, player)
 					else
-						table.remove(autojoined, j)
+						table.remove(autojoined, k)
 					end
 				end
 			end)
 		end
-		local leftConn = Players.PlayerRemoving:Connect(function(player: PlayerAug)
+		local leftConn = Players.PlayerRemoving:Connect(function(player: Player)
 			local i = table.find(joined, player)
 			if i then
 				table.remove(joined, i)
@@ -586,7 +622,7 @@ while true do
 				end
 			end)
 		end
-		_gmessage.Parent = script
+		_gmessage = Instance.new('Hint', script)
 		while i > 0 do
 			local roster = ""
 			for _, player in ipairs(joined) do
@@ -603,15 +639,15 @@ while true do
 			end
 		end
 		if skipConn then skipConn:Disconnect() end
-		_gmessage.Parent = nil
+		_gmessage:Destroy()
 
-		local ingame = true
 		local platforms: { Part } = {}
+		local playing: { Playing } = {}
 		local function rem(i: number)
-			if joined[i].Character and joined[i].Character.Humanoid then
-				joined[i].Character.Humanoid.Health = 0
+			if playing[i] and playing[i].Character and playing[i].Character.Humanoid then
+				playing[i].Character.Humanoid.Health = 0
 			end
-			joined[i] = nil
+			playing[i] = nil
 			if platforms[i] then
 				platforms[i].Transparency = 0.5
 				platforms[i].BrickColor = BrickColor.Red()
@@ -623,7 +659,7 @@ while true do
 		local chatConns = {}
 		local remaining = 0
 		local nextEvent: PlayerEvent | PlatformEvent = nil
-		local nextEventType: string = nil
+		local nextEventType: string = ''
 		for i, player in next, joined do
 			local humdesc = Players:GetHumanoidDescriptionFromOutfitId(2913007835)
 			humdesc.Face = Players:GetHumanoidDescriptionFromUserId(player.UserId).Face
@@ -634,26 +670,28 @@ while true do
 			humdesc.RightLegColor = color
 			player:LoadCharacterWithHumanoidDescription(humdesc)
 			if not player.Character then player.CharacterAdded:Wait() end
-			local healthScript: Instance? = player.Character:FindFirstChild('Health')
+			player:WaitForChild('Backpack', 5)
+			local playingPlayer: Playing = player :: Playing 
+			local healthScript: Instance? = playingPlayer.Character:FindFirstChild('Health')
 			if healthScript then healthScript:Destroy() end
 			local decal = Instance.new('Decal')
 			decal.Texture = `rbxassetid://{randomElement(icons)}`
-			decal.Parent = player.Character.Torso
-			player.Character.Humanoid.WalkSpeed = 0
+			decal.Parent = playingPlayer.Character.Torso
+			playingPlayer.Character.Humanoid.WalkSpeed = 0
 			task.delay(3, function()
-				player.Character.Humanoid.WalkSpeed = 16
+				playingPlayer.Character.Humanoid.WalkSpeed = 16
 			end)
-			player.Character.Head.CFrame = CFrame.new(0, 10000, 0)
-			local alive = player.Character.Humanoid.Died:Once(function()
+			playingPlayer.Character.Head.CFrame = CFrame.new(0, 10000, 0)
+			local alive = playingPlayer.Character.Humanoid.Died:Once(function()
 				rem(i)
 				remaining -= 1
 			end)
-			_ltargets[i] = Instance.new('Hint', player.PlayerGui)
+			_ltargets[i] = Instance.new('Hint', playingPlayer.PlayerGui)
 			task.spawn(function()
 				while task.wait(1) do
 					if not alive.Connected then return end
-					if not (player and player.Character and player.Character:FindFirstChild('Head')) then break end
-					if player.Character.Head.Position.Y < (if player.Character:FindFirstChildWhichIsA('ForceField') then 30 else 40) then break end
+					if not playerPlaying(playingPlayer) then continue end
+					if playingPlayer.Character.Head.Position.Y < (if playingPlayer.Character:FindFirstChildWhichIsA('ForceField') then 30 else 40) then break end
 				end
 				rem(i)
 				alive:Disconnect()
@@ -681,6 +719,7 @@ while true do
 				end
 			end)
 			aliveConns[i] = alive
+			playing[i] = playingPlayer
 			remaining += 1
 		end
 		local survival = remaining == 1
@@ -694,37 +733,49 @@ while true do
 			new:SetAttribute('originColor', new.Color)
 			new.Size = Vector3.new(8, 1, 8)
 			new.Position = Vector3.new(0, 50, 0) + Vector3.new(i % w - w / 2, 0, math.floor(i / w) - h / 2) * 14
-			new.Name = joined[i].DisplayName
+			new.Name = playing[i].DisplayName
 			platforms[i] = new
 			new.Parent = script
-			joined[i].Character.Head.CFrame = new.CFrame + Vector3.yAxis * 50
+			playing[i].Character.Head.CFrame = new.CFrame + Vector3.yAxis * 50
 		end
 
 		ldeclare('Starting ' .. (if survival then 'Survival mode' else 'Battle royale mode'))
 		task.wait(3)
 
 		local rounds = 0
-		local prevEvent = {}
+		local prevEvent: PlayerEvent | PlatformEvent = nil
+		local failedEvents = 0
 		while remaining > (if survival then 0 else 1) do
+			assert(failedEvents < 3, 'Too many failed events!')
+			local playerEventAttempted = 0
+			local platformEventAttempted = 0
 			while true do
+				if platformEventAttempted > 5 and playerEventAttempted > 5 then 
+					failedEvents += 1
+					break
+				end
 				task.wait()
 				local t = if math.random() < .5 then 'player' else 'platform'
 				local forced = false
-				if nextEventType ~= nil then
+				if nextEventType ~= '' then
 					t = nextEventType
-					nextEventType = nil
+					nextEventType = ''
 					forced = true
 				end
 				if t == 'player' then
-					local player = randomElement(joined)
-					local event = if forced then nextEvent else randomElement(playerEvents)
+					local player = randomElement(playing) :: Playing
+					if not playerPlaying(player) then playerEventAttempted += 1; continue end
+					local event = (if forced then nextEvent else randomElement(playerEvents)) :: PlayerEvent
+					if not event then playerEventAttempted += 1; continue end
 					if prevEvent == event then continue end
 					if not event.condition(player) then continue end
 					ldeclare(event.text:format(player.DisplayName, event.run(player)))
 					prevEvent = event
 				elseif t == 'platform' then
 					local platform = randomElement(platforms)
-					local event = if forced then nextEvent else randomElement(platformEvents)
+					if not platform then platformEventAttempted += 1; continue end
+					local event = (if forced then nextEvent else randomElement(platformEvents)) :: PlatformEvent
+					if not event then platformEventAttempted += 1; continue end
 					if prevEvent == event then continue end
 					if not event.condition(platform) then continue end
 					ldeclare(event.text:format(platform.Name, event.run(platform)))
@@ -743,10 +794,10 @@ while true do
 
 		_gmessage = Instance.new('Hint', script)
 		if remaining == 1 then
-			local winner = randomElement(joined)
+			local winner = randomElement(joined) :: Playing
 			gdeclare(`{winner.DisplayName} won ! ! !`)
 		elseif survival then
-			local record, _ = survivalRecord:ReadAsync(1, true, 0)
+			local record = survivalRecord:ReadAsync(1, true, 0)
 			if not record then
 				record = {
 					rounds = 0,
@@ -766,7 +817,6 @@ while true do
 			gdeclare('Everyone died...')
 		end
 
-		ingame = false
 		for _, conn in next, aliveConns do
 			if not conn.Connected then continue end
 			conn:Disconnect()
@@ -775,10 +825,9 @@ while true do
 			if not conn.Connected then continue end
 			conn:Disconnect()
 		end
-		script:ClearAllChildren()
-		_gmessage = Instance.new('Hint')
 
 		task.wait(5)
+		script:ClearAllChildren()
 	end, function(...)
 		warn(debug.traceback(...))
 	end)
