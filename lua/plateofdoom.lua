@@ -745,24 +745,24 @@ while true do
 				table.remove(joined, i)
 			end
 		end)
-		local i = 25
+		local t = 25
 		local skipConn: RBXScriptConnection = nil
 		if owner then
 			skipConn = owner.Chatted:Connect(function(h)
 				if h == "p%skip" then
-					i = 0
+					t = 0
 				end
 			end)
 		end
 		_gmessage = Instance.new('Hint', script)
-		while i > 0 do
+		while t > 0 do
 			local roster = ""
 			for _, player in ipairs(joined) do
 				roster ..= player.DisplayName .. '\n'
 			end
-			gdeclare(`{('\n'):rep(#joined)}\n\ngithub.com/fofl12/sk - Starting the plate of the doom in {i} seconds - Say p%join or p%auto to join\nWant to choose which events happen? Join comsurg's group and purchase the stakeholder t-shirt for 12 robux!\n{roster}`)
+			gdeclare(`{('\n'):rep(#joined)}\n\ngithub.com/fofl12/sk - Starting the plate of the doom in {t} seconds - Say p%join or p%auto to join\nWant to choose which events happen? Join comsurg's group and purchase the stakeholder t-shirt for 12 robux!\n{roster}`)
 			task.wait(1)
-			i -= 1
+			t -= 1
 		end
 		leftConn:Disconnect()
 		for _, conn in next, conns do
@@ -887,14 +887,14 @@ while true do
 					break
 				end
 				task.wait()
-				local t = if math.random() < .5 then 'player' else 'platform'
+				local typ = if math.random() < .5 then 'player' else 'platform'
 				local forced = false
 				if nextEventType ~= '' then
-					t = nextEventType
+					typ = nextEventType
 					nextEventType = ''
 					forced = true
 				end
-				if t == 'player' then
+				if typ == 'player' then
 					local player = randomElement(playing) :: Playing
 					if not playerPlaying(player) then playerEventAttempted += 1; continue end
 					local event = (if forced then nextEvent else randomElement(playerEvents)) :: PlayerEvent
@@ -903,7 +903,7 @@ while true do
 					if not event.condition(player) then continue end
 					ldeclare(event.text:format(player.DisplayName, event.run(player)))
 					prevEvent = event
-				elseif t == 'platform' then
+				elseif typ == 'platform' then
 					local platform = randomElement(platforms)
 					if not platform then platformEventAttempted += 1; continue end
 					local event = (if forced then nextEvent else randomElement(platformEvents)) :: PlatformEvent
