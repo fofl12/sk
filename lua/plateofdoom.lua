@@ -20,6 +20,10 @@ if getfenv().owner then
 	owner = getfenv().owner
 end
 
+-- disable this if you are going to run the script in studio
+local EnableMemoryStoreService = true
+
+
 type PlatformEvent = {
 	text: string,
 	command: string,
@@ -52,14 +56,25 @@ type DeviceAdvantage = {
 	name: string,
 	run: (c: Character) -> nil
 }
+type SurvivalRecord = {
+	holder: string,
+	rounds: number
+}
+type PlatformThing = {
+	name: string,
+	run: (platform: Part) -> nil
+}
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
-local MemoryStoreService = game:GetService("MemoryStoreService")
 local Debris = game:GetService("Debris")
 local Chat = game:GetService("Chat")
+local MemoryStoreService = game:GetService("MemoryStoreService")
 
-local survivalRecord = MemoryStoreService:GetQueue('github.com/fofl12/sk - plateofdoom.lua', 1)
+local survivalRecord: MemoryStoreQueue = nil
+if EnableMemoryStoreService then
+	survivalRecord = MemoryStoreService:GetQueue('github.com/fofl12/sk - plateofdoom.lua 2', 1)
+end
 
 local _spawn = Instance.new('SpawnLocation', script)
 _spawn.Anchored = true
@@ -343,7 +358,7 @@ local platformEvents: { PlatformEvent } = {
 			return platform and (platform.Parent ~= nil)
 		end,
 		run = function(platform: Part)
-			local qty = math.random() * 10 - 5
+			local qty = math.random() * 20 - 10
 			local t = math.random() * 20
 			local tween = TweenService:Create(platform, TweenInfo.new(t), {
 				Size = platform.Size + Vector3.new(qty, 0, qty)
@@ -368,7 +383,7 @@ local platformEvents: { PlatformEvent } = {
 			return platform and (platform.Parent ~= nil)
 		end,
 		run = function(platform: Part)
-			local qty = math.random() * 1.8 - 0.9
+			local qty = math.random() * 5 - 2.5
 			local t = math.random() * 20
 			local tween = TweenService:Create(platform, TweenInfo.new(t), {
 				Size = platform.Size + Vector3.yAxis * qty
@@ -415,6 +430,12 @@ local platformEvents: { PlatformEvent } = {
 			})
 			table.insert(ptweens, tween)
 			tween:Play()
+			for _, desc in next, platform:GetDescendants() do
+				if not desc:IsA('BasePart') then continue end
+				TweenService:Create(desc, TweenInfo.new(qty), {
+					Transparency = 1
+				}):Play()
+			end
 			task.delay(qty, function()
 				if tween.PlaybackState == Enum.PlaybackState.Cancelled then return end
 				if platform then
@@ -510,7 +531,7 @@ local platformEvents: { PlatformEvent } = {
 		end,
 		run = function(platform: Part)
 			local dir = Vector3.new(math.random() * 2 - 1, math.random() * 2 - 1, math.random() * 2 - 1)
-			local tween = TweenService:Create(platform, TweenInfo.new(1000 / math.random()), {
+			local tween = TweenService:Create(platform, TweenInfo.new(1000 / (math.random() * 5)), {
 				Position = platform.Position + dir * 500
 			})
 			table.insert(ptweens, tween)
@@ -560,14 +581,125 @@ local platformEvents: { PlatformEvent } = {
 					tween:Cancel()
 				end
 			end
-			platform.Size = Vector3.new(8, 1, 8)
+			platform.Size = Vector3.new(12, 1, 12)
 			platform.Color = platform:GetAttribute('originColor')
 			platform.AssemblyLinearVelocity = Vector3.zero
 			platform.Transparency = 0
 			platform:ClearAllChildren()
 			platform.Parent = script
 		end
-	}
+	},
+	{
+		text = '%s platform will gain a bomb',
+		command = 'bomb',
+		condition = function(platform: Part)
+			return true
+		end,
+		run = function(platform: Part)
+			local new = Instance.new('Part')
+			new.BrickColor = BrickColor.Black()
+			new.Size = Vector3.one * 2
+			new.Shape = Enum.PartType.Ball
+			new.Parent = platform
+			local weld = Instance.new('Weld')
+			weld.Part0 = platform
+			weld.Part1 = new
+			weld.C0 = CFrame.new(math.random() * platform.Size.X - platform.Size.X / 2, platform.Size.Y / 2 + 1, math.random() * platform.Size.Z - platform.Size.Z / 2)
+			weld.Parent = platform
+			local bg = Instance.new('BillboardGui')
+			bg.StudsOffsetWorldSpace = Vector3.yAxis * 4
+			bg.Size = UDim2.fromScale(1, 1)
+			local label = Instance.new('TextLabel')
+			label.BackgroundTransparency = 1
+			label.TextColor3 = BrickColor.Red().Color
+			label.Size = UDim2.fromScale(1, 1)
+			label.TextScaled = true
+			label.Text = 'Hi'
+			label.Parent = bg
+			bg.Parent = new
+			bg.Adornee = new
+			local qty = math.random(20, 60)
+			Debris:AddItem(new, qty + 3)
+			task.spawn(function()
+				for i = qty, 1, -1 do
+					if not label then return end
+					label.Text = tostring(i)
+					task.wait(1)
+				end
+				if not new then return end
+				new.BrickColor = BrickColor.Red()
+				local x = Instance.new('Explosion')
+				x.BlastRadius = 10
+				x.Position = new.Position
+				x.Parent = platform
+			end)
+		end
+	},
+	{
+		text = '%s platform will gain %s',
+		command = 'platformthing',
+		condition = function(platform: Part)
+			return true
+		end,
+		run = function(platform: Part)
+			local things: { PlatformThing } = {
+				{
+					name = 'truss',
+					run = function(platform: Part)
+						local new = Instance.new('TrussPart')
+						local h = math.random(4, 20)
+						new.Size = Vector3.new(1, 1, 1)
+						new.BrickColor = BrickColor.random()
+						new.Parent = platform
+						local weld = Instance.new('Weld')
+						weld.Part0 = platform
+						weld.Part1 = new
+						weld.C0 = CFrame.new(math.random() * platform.Size.X - platform.Size.X / 2, -h/2, math.random() * platform.Size.Z - platform.Size.Z / 2)
+						weld.Parent = platform
+						local t = math.random(5, 50)
+						TweenService:Create(weld, TweenInfo.new(t), {
+							C0 = weld.C0 + Vector3.yAxis * h
+						}):Play()
+						TweenService:Create(new, TweenInfo.new(t), {
+							Size = Vector3.new(1, h, 1)
+						}):Play()
+					end
+				},
+				{
+					name = 'wall',
+					run = function(platform: Part)
+						local angle = math.random() * math.pi
+						local length: number = nil
+						if angle < 45 or angle > 135 then
+							length = math.abs(platform.Size.X / math.cos(angle))
+						else
+							length = platform.Size.Z / math.sin(angle)
+						end
+						local h = math.random(2, 15)
+						local new = Instance.new('Part')
+						new.Size = Vector3.new(1, 1, length)
+						new.Material = Enum.Material.Brick
+						new.BrickColor = BrickColor.Red()
+						new.Parent = platform
+						local weld = Instance.new('Weld')
+						weld.Part0 = platform
+						weld.Part1 = new
+						weld.C0 = CFrame.Angles(0, angle, 0)
+						local t = math.random(5, 50)
+						TweenService:Create(weld, TweenInfo.new(t), {
+							C0 = CFrame.new(0, h / 2, 0) * weld.C0
+						}):Play()
+						TweenService:Create(new, TweenInfo.new(t), {
+							Size = Vector3.new(1, h, 1)
+						}):Play()
+					end
+				}
+			}
+			local thing = randomElement(things) :: PlatformThing
+			thing.run(platform)
+			return thing.name
+		end
+	},
 }
 
 local autojoined: { Player } = {}
@@ -731,8 +863,8 @@ while true do
 			new.Anchored = true
 			new.Color = getChatColor(joined[i].Name)
 			new:SetAttribute('originColor', new.Color)
-			new.Size = Vector3.new(8, 1, 8)
-			new.Position = Vector3.new(0, 50, 0) + Vector3.new(i % w - w / 2, 0, math.floor(i / w) - h / 2) * 14
+			new.Size = Vector3.new(12, 1, 12)
+			new.Position = Vector3.new(0, 50, 0) + Vector3.new(i % w - w / 2, 0, math.floor(i / w) - h / 2) * 20
 			new.Name = playing[i].DisplayName
 			platforms[i] = new
 			new.Parent = script
@@ -794,24 +926,28 @@ while true do
 
 		_gmessage = Instance.new('Hint', script)
 		if remaining == 1 then
-			local winner = randomElement(joined) :: Playing
+			local winner = randomElement(playing) :: Playing
 			gdeclare(`{winner.DisplayName} won ! ! !`)
 		elseif survival then
-			local record = survivalRecord:ReadAsync(1, true, 0)
-			if not record then
-				record = {
-					rounds = 0,
-					holder = 'Anonymous'
-				}
-			else
-				record = record[1]
-			end
-			gdeclare(`\n{if record.rounds < rounds then '\n' else ''}{survivalplayer.DisplayName} survived for {rounds} rounds ! ! !\n{if record.rounds < rounds then 'NEW RECORD\n' else ''}World record: {record.rounds} by {record.holder}`)
-			if rounds > record.rounds then
-				survivalRecord:AddAsync({
-					rounds = rounds,
-					holder = `{survivalplayer.DisplayName} ({survivalplayer.Name})`
-				}, 3888000)
+			gdeclare(`{survivalplayer.DisplayName} survived for {rounds} rounds ! ! !`)
+			if EnableMemoryStoreService then
+				xpcall(function()
+					local records = survivalRecord:ReadAsync(5, false, 0) :: { SurvivalRecord }
+					if not records then
+						records = { { rounds = 0, holder = '???' } }
+					end
+					local recordlist = ''
+					for i = 1, 5 do
+						local record = if #records >= i then records[i] else { rounds = 0, holder = '???' }
+						recordlist ..= `{i}. {record.rounds} by {record.holder}\n`
+					end
+					gdeclare(`{('\n'):rep(6)}{if records[1].rounds < rounds then '\n' else ''}{survivalplayer.DisplayName} survived for {rounds} rounds ! ! !\n{if records[1].rounds < rounds then 'NEW RECORD\n' else ''}{recordlist}`)
+					survivalRecord:AddAsync({
+						rounds = rounds,
+						holder = `{survivalplayer.DisplayName} ({survivalplayer.Name})`
+					}, 3888000, rounds)
+					task.wait(5)
+				end, function(...) warn('Error while using MemoryStoreService:', debug.traceback(...)) end)
 			end
 		else
 			gdeclare('Everyone died...')
