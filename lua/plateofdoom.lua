@@ -21,7 +21,7 @@ if getfenv().owner then
 end
 
 -- disable this if you are going to run the script in studio
-local EnableMemoryStoreService = true
+local EnableMemoryStoreService = false
 
 
 type PlatformEvent = {
@@ -584,7 +584,8 @@ local platformEvents: { PlatformEvent } = {
 			tween:Play()
 		end
 	},
-	{
+	--[[ 
+	{ -- (temporarily?) removed for balance
 		text = '%s platform will be cleared',
 		command = 'clear',
 		condition = function(platform: Part)
@@ -594,6 +595,7 @@ local platformEvents: { PlatformEvent } = {
 			platform:ClearAllChildren()
 		end
 	},
+	]]
 	{
 		text = '%s will gain control of their platform',
 		command = 'control',
@@ -603,7 +605,6 @@ local platformEvents: { PlatformEvent } = {
 		run = function(platform: Part)
 			local seat = Instance.new('VehicleSeat')
 			seat.Size = Vector3.one * 2
-			seat.Anchored = true
 			seat.Color = platform:GetAttribute('originColor')
 			seat.Parent = platform
 			colliderReg(seat)
@@ -612,6 +613,7 @@ local platformEvents: { PlatformEvent } = {
 			weld.Part1 = seat
 			weld.C0 = CFrame.new(0, platform.Size.Y / 2, 0)
 			weld.Parent = platform
+
 			task.spawn(function()
 				while platform and seat do
 					local delta = task.wait(1/20)
@@ -722,14 +724,12 @@ local platformEvents: { PlatformEvent } = {
 					name = 'wall',
 					run = function(platform: Part)
 						local angle = math.random() * math.pi
-						print(angle)
 						local length: number = nil
 						if angle < math.pi / 4 or angle > 3 * math.pi / 4 then
 							length = math.abs(platform.Size.X / math.cos(angle))
 						else
 							length = platform.Size.Z / math.sin(angle)
 						end
-						print(length)
 						local h = math.random(5, 30)
 						local new = Instance.new('Part')
 						new.Size = Vector3.new(1, 1, length)
@@ -749,18 +749,15 @@ local platformEvents: { PlatformEvent } = {
 						TweenService:Create(new, TweenInfo.new(t), {
 							Size = Vector3.new(1, h, length)
 						}):Play()
-						task.delay(10, function()
-							print(platform.Position, new.Position, new, weld)
-						end)
 					end
 				},
 				{
-					name = 'cactus',
+					name = 'a cactus',
 					run = function(platform: Part)
 						local new = Instance.new('Part')
 						local h = math.random(4, 50)
 						new.Size = Vector3.new(3, 1, 3)
-						new.BrickColor = BrickColor.random()
+						new.BrickColor = BrickColor.Green()
 						new.Parent = platform
 						colliderReg(new)
 						local weld = Instance.new('Weld')
@@ -777,9 +774,9 @@ local platformEvents: { PlatformEvent } = {
 						}):Play()
 						local touch = platformbind(new.Touched, new):Connect(function(part: Part)
 							if not part.Parent then return end
-							local hum: Humanoid? = part.Parent:FindFirstAncestorWhichIsA('Humanoid')
+							local hum = part.Parent:FindFirstChildWhichIsA('Humanoid')
 							if not hum then return end
-							hum.Health -= 10 -- TakeDamage doesn't work when the character has a forcefield
+							hum:TakeDamage(8)
 						end)
 						table.insert(uconns, touch)
 					end
