@@ -70,25 +70,46 @@ local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
 local Chat = game:GetService("Chat")
 local MemoryStoreService = game:GetService("MemoryStoreService")
+local PhysicsService = game:GetService("PhysicsService")
 
 local survivalRecord: MemoryStoreQueue = nil
 if EnableMemoryStoreService then
 	survivalRecord = MemoryStoreService:GetQueue('github.com/fofl12/sk - plateofdoom.lua 2', 1)
 end
 
+local leaderboardban: { string } = {
+	'game_fixing', -- this stupid interfered in a survival mode game (humiliate him)
+}
+
 local _spawn = Instance.new('SpawnLocation', script)
 _spawn.Anchored = true
 
-local hats = {
-	30845203,
-	2309346267,
-	4819740796,
-	5549581794,
-	2506365681,
-	8136940617,
-	6763676405
+local hats: { number } = {
+	30845203, 1081366,
+	2309346267, 102619342,
+	5549581794, 1097026,
+	6837506, 23630696,
+	1028859, 21754973,
+	124746065, 215724779,
+	271014536, 124745808,
+	13700820,
+	4078588496,
+	89615321,
+	139152472,
+	16218365,
+	1743924583,
+	22547651,
+	1374269,
+	16218214,
+	10476359,
+	122275601,
+	63689493,
+	3138460373,
+	16179349,
+	1425132751,
+	15967866,
 }
-local icons = {
+local icons: { number } = {
 	6023565902, 6031154875,
 	6022668893, 6031280889,
 	6031079152, 6031225842,
@@ -148,6 +169,22 @@ local function ldeclare(message: string)
 	end
 end
 
+if PhysicsService:IsCollisionGroupRegistered('plateofdoom.lua') then
+	PhysicsService:UnregisterCollisionGroup('plateofdoom.lua')
+end
+PhysicsService:RegisterCollisionGroup('plateofdoom.lua')
+PhysicsService:CollisionGroupSetCollidable('Default', 'plateofdoom.lua', false)
+PhysicsService:CollisionGroupSetCollidable('plateofdoom.lua', 'plateofdoom.lua', true)
+local function colliderReg(part: Instance)
+	if part:IsA('BasePart') then
+		part.CollisionGroup = 'plateofdoom.lua'
+	end
+	for _, desc in next, part:GetDescendants() do
+		if not desc:IsA('BasePart') then continue end
+		desc.CollisionGroup = 'plateofdoom.lua'
+	end
+end
+
 function getChatColor(user: string): Color3
 	local CHAT_COLORS =
 		{
@@ -201,6 +238,10 @@ end
 
 local function charPlaying(char: Instance?): boolean
 	if not (char and char.Parent == workspace and char:IsA('Model')) then return false end
+	for _, tool in next, char:GetChildren() do
+		if not tool:IsA('BackpackItem') then continue end
+		if not tool:GetAttribute('Certifiedbyh') then return false end
+	end
 	local hum: Instance? = char:FindFirstChild('Humanoid')
 	local head: Instance? = char:FindFirstChild('Head')
 	local torso: Instance? = char:FindFirstChild('Torso')
@@ -223,6 +264,7 @@ local function playerPlaying(player: Playing): boolean
 end
 
 local ptweens: { Tween } = {}
+local uconns: { RBXScriptConnection } = {}
 
 local playerEvents: { PlayerEvent } = {
 	{
@@ -304,6 +346,7 @@ local playerEvents: { PlayerEvent } = {
 						new.Position = c.Head.Position - Vector3.yAxis * 8
 						new.Parent = script
 						new.AssemblyLinearVelocity = Vector3.yAxis * 200
+						colliderReg(new)
 						Debris:AddItem(new, 10)
 					end
 				},
@@ -323,17 +366,19 @@ local playerEvents: { PlayerEvent } = {
 			new.Name = 'Device'
 			local t = randomElement(advantages) :: DeviceAdvantage
 			new.ToolTip = t.name
-			new.Activated:Connect(function()
+			local conn = new.Activated:Connect(function()
 				local c = new.Parent
 				if charPlaying(c) then t.run(c :: Character) end
 				new:Destroy()
 			end)
+			table.insert(uconns, conn)
 			local handle = Instance.new('Part')
 			handle.Size = Vector3.one
 			handle.Transparency = 1
 			handle.Name = 'Handle'
 			Instance.new('Sparkles', handle)
 			handle.Parent = new
+			colliderReg(handle)
 			new.Parent = player.Backpack
 		end
 	},
@@ -519,7 +564,8 @@ local platformEvents: { PlatformEvent } = {
 			}
 			local t = randomElement(types) :: PlateType
 			platform.BrickColor = t.color
-			platformbind(platform.Touched, platform):Connect(t.run)
+			local conn = platformbind(platform.Touched, platform):Connect(t.run)
+			table.insert(uconns, conn)
 			return t.name
 		end
 	},
@@ -560,11 +606,16 @@ local platformEvents: { PlatformEvent } = {
 			seat.Anchored = true
 			seat.Color = platform:GetAttribute('originColor')
 			seat.Parent = platform
+			colliderReg(seat)
+			local weld = Instance.new('Weld')
+			weld.Part0 = platform
+			weld.Part1 = seat
+			weld.C0 = CFrame.new(0, platform.Size.Y / 2, 0)
+			weld.Parent = platform
 			task.spawn(function()
 				while platform and seat do
 					local delta = task.wait(1/20)
 					platform.Position += Vector3.new(seat.SteerFloat, 0, -seat.ThrottleFloat) * delta * 2
-					seat.Position = platform.Position
 				end
 			end)
 		end
@@ -601,6 +652,7 @@ local platformEvents: { PlatformEvent } = {
 			new.Size = Vector3.one * 2
 			new.Shape = Enum.PartType.Ball
 			new.Parent = platform
+			colliderReg(new)
 			local weld = Instance.new('Weld')
 			weld.Part0 = platform
 			weld.Part1 = new
@@ -626,7 +678,7 @@ local platformEvents: { PlatformEvent } = {
 					label.Text = tostring(i)
 					task.wait(1)
 				end
-				if not new then return end
+				if not (new and new.Parent == platform) then return end
 				new.BrickColor = BrickColor.Red()
 				local x = Instance.new('Explosion')
 				x.BlastRadius = 10
@@ -651,6 +703,7 @@ local platformEvents: { PlatformEvent } = {
 						new.Size = Vector3.new(1, 1, 1)
 						new.BrickColor = BrickColor.random()
 						new.Parent = platform
+						colliderReg(new)
 						local weld = Instance.new('Weld')
 						weld.Part0 = platform
 						weld.Part1 = new
@@ -669,29 +722,66 @@ local platformEvents: { PlatformEvent } = {
 					name = 'wall',
 					run = function(platform: Part)
 						local angle = math.random() * math.pi
+						print(angle)
 						local length: number = nil
-						if angle < 45 or angle > 135 then
+						if angle < math.pi / 4 or angle > 3 * math.pi / 4 then
 							length = math.abs(platform.Size.X / math.cos(angle))
 						else
 							length = platform.Size.Z / math.sin(angle)
 						end
-						local h = math.random(2, 15)
+						print(length)
+						local h = math.random(5, 30)
 						local new = Instance.new('Part')
 						new.Size = Vector3.new(1, 1, length)
 						new.Material = Enum.Material.Brick
 						new.BrickColor = BrickColor.Red()
 						new.Parent = platform
+						colliderReg(new)
 						local weld = Instance.new('Weld')
 						weld.Part0 = platform
 						weld.Part1 = new
 						weld.C0 = CFrame.Angles(0, angle, 0)
-						local t = math.random(5, 50)
+						weld.Parent = platform
+						local t = math.random(5, 30)
 						TweenService:Create(weld, TweenInfo.new(t), {
 							C0 = CFrame.new(0, h / 2, 0) * weld.C0
 						}):Play()
 						TweenService:Create(new, TweenInfo.new(t), {
-							Size = Vector3.new(1, h, 1)
+							Size = Vector3.new(1, h, length)
 						}):Play()
+						task.delay(10, function()
+							print(platform.Position, new.Position, new, weld)
+						end)
+					end
+				},
+				{
+					name = 'cactus',
+					run = function(platform: Part)
+						local new = Instance.new('Part')
+						local h = math.random(4, 50)
+						new.Size = Vector3.new(3, 1, 3)
+						new.BrickColor = BrickColor.random()
+						new.Parent = platform
+						colliderReg(new)
+						local weld = Instance.new('Weld')
+						weld.Part0 = platform
+						weld.Part1 = new
+						weld.C0 = CFrame.new(math.random() * platform.Size.X - platform.Size.X / 2, 0, math.random() * platform.Size.Z - platform.Size.Z / 2)
+						weld.Parent = platform
+						local t = math.random(5, 60)
+						TweenService:Create(weld, TweenInfo.new(t), {
+							C0 = weld.C0 + Vector3.yAxis * h / 2
+						}):Play()
+						TweenService:Create(new, TweenInfo.new(t), {
+							Size = Vector3.new(3, h, 3)
+						}):Play()
+						local touch = platformbind(new.Touched, new):Connect(function(part: Part)
+							if not part.Parent then return end
+							local hum: Humanoid? = part.Parent:FindFirstAncestorWhichIsA('Humanoid')
+							if not hum then return end
+							hum.Health -= 10 -- TakeDamage doesn't work when the character has a forcefield
+						end)
+						table.insert(uconns, touch)
 					end
 				}
 			}
@@ -709,6 +799,13 @@ while true do
 		if not hint then continue end
 		hint:Destroy()
 	end
+	for i, conn in next, uconns do
+		if not conn.Connected then 
+			uconns[i] = nil
+			continue
+		end
+		conn:Disconnect()
+	end
 	local err = xpcall(function()
 		local conns: { RBXScriptConnection } = {}
 		local joined: { Player } = table.clone(autojoined)
@@ -722,7 +819,7 @@ while true do
 				elseif message == "p%leave" then
 					local j = table.find(joined,player)
 					if j then
-						table.remove(joined,i)
+						table.remove(joined,j)
 					end
 				elseif message == 'p%auto' then
 					local j = table.find(joined,player)
@@ -738,6 +835,7 @@ while true do
 					end
 				end
 			end)
+			table.insert(uconns, conns[i])
 		end
 		local leftConn = Players.PlayerRemoving:Connect(function(player: Player)
 			local i = table.find(joined, player)
@@ -745,6 +843,7 @@ while true do
 				table.remove(joined, i)
 			end
 		end)
+		table.insert(uconns, leftConn)
 		local t = 25
 		local skipConn: RBXScriptConnection = nil
 		if owner then
@@ -753,6 +852,7 @@ while true do
 					t = 0
 				end
 			end)
+			table.insert(uconns, skipConn)
 		end
 		_gmessage = Instance.new('Hint', script)
 		while t > 0 do
@@ -800,10 +900,17 @@ while true do
 			humdesc.TorsoColor = color
 			humdesc.LeftLegColor = color
 			humdesc.RightLegColor = color
+			if player.Character then player.Character:Destroy() end
 			player:LoadCharacterWithHumanoidDescription(humdesc)
 			if not player.Character then player.CharacterAdded:Wait() end
 			player:WaitForChild('Backpack', 5)
 			local playingPlayer: Playing = player :: Playing 
+			if playingPlayer.Character.Humanoid.RigType ~= Enum.HumanoidRigType.R6 then
+				playingPlayer.Character:Destroy() -- if anyone knows how to force the avatar to be r6, please tell me
+				continue
+			end
+			remaining += 1
+			colliderReg(playingPlayer.Character)
 			local healthScript: Instance? = playingPlayer.Character:FindFirstChild('Health')
 			if healthScript then healthScript:Destroy() end
 			local decal = Instance.new('Decal')
@@ -818,19 +925,21 @@ while true do
 				rem(i)
 				remaining -= 1
 			end)
-			_ltargets[i] = Instance.new('Hint', playingPlayer.PlayerGui)
+			aliveConns[remaining] = alive
+			table.insert(uconns, alive)
+			_ltargets[remaining] = Instance.new('Hint', playingPlayer.PlayerGui)
 			task.spawn(function()
 				while task.wait(1) do
 					if not alive.Connected then return end
-					if not playerPlaying(playingPlayer) then continue end
+					if not playerPlaying(playingPlayer) then break end
 					if playingPlayer.Character.Head.Position.Y < (if playingPlayer.Character:FindFirstChildWhichIsA('ForceField') then 30 else 40) then break end
 				end
-				rem(i)
+				rem(remaining)
 				alive:Disconnect()
 				remaining -= 1
 			end)
 			local stakeholder = player:GetRankInGroup(8468419) >= 110
-			chatConns[i] = player.Chatted:Connect(function(message: string)
+			chatConns[remaining] = player.Chatted:Connect(function(message: string)
 				if not player.Character then return end
 				Chat:Chat(player.Character, message)
 				if not stakeholder then return end
@@ -850,15 +959,14 @@ while true do
 					end
 				end
 			end)
-			aliveConns[i] = alive
-			playing[i] = playingPlayer
-			remaining += 1
+			table.insert(uconns, chatConns[remaining])
+			playing[remaining] = playingPlayer
 		end
 		local survival = remaining == 1
 		local survivalplayer = joined[1]
 		local w = math.ceil(math.sqrt(#joined))
 		local h = math.floor(#joined / w)
-		for i = 1, #joined do
+		for i = 1, #playing do
 			local new = Instance.new('Part')
 			new.Anchored = true
 			new.Color = getChatColor(joined[i].Name)
@@ -868,6 +976,7 @@ while true do
 			new.Name = playing[i].DisplayName
 			platforms[i] = new
 			new.Parent = script
+			colliderReg(new)
 			playing[i].Character.Head.CFrame = new.CFrame + Vector3.yAxis * 50
 		end
 
@@ -930,7 +1039,7 @@ while true do
 			gdeclare(`{winner.DisplayName} won ! ! !`)
 		elseif survival then
 			gdeclare(`{survivalplayer.DisplayName} survived for {rounds} rounds ! ! !`)
-			if EnableMemoryStoreService then
+			if EnableMemoryStoreService and not table.find(leaderboardban, survivalplayer.Name) then
 				xpcall(function()
 					local records = survivalRecord:ReadAsync(5, false, 0) :: { SurvivalRecord }
 					if not records then
