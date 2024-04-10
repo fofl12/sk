@@ -21,7 +21,7 @@ if getfenv().owner then
 end
 
 -- disable this if you are going to run the script in studio
-local EnableMemoryStoreService = false
+local EnableMemoryStoreService = true
 
 
 type PlatformEvent = {
@@ -806,10 +806,10 @@ while true do
 	local err = xpcall(function()
 		local conns: { RBXScriptConnection } = {}
 		local joined: { Player } = table.clone(autojoined)
-		for i, player: Player in next, Players:GetPlayers() do
-			conns[i] = player.Chatted:Connect(function(message)
+		local function handlePreGameCommand(player: Player)
+			return function(message: string)
 				if message == 'p%join' then
-					local j = table.find(joined,player)
+					local j = table.find(joined, player)
 					if not j then
 						table.insert(joined, player)
 					end
@@ -831,9 +831,17 @@ while true do
 						table.remove(autojoined, k)
 					end
 				end
-			end)
+			end
+		end
+		for i, player: Player in next, Players:GetPlayers() do
+			conns[i] = player.Chatted:Connect(handlePreGameCommand(player))
 			table.insert(uconns, conns[i])
 		end
+		local pjoinConn = Players.PlayerAdded:Connect(function(player: Player)
+			local conn = player.Chatted:Connect(handlePreGameCommand(player))
+			table.insert(conns, conn)
+			table.insert(uconns, conn)
+		end)
 		local leftConn = Players.PlayerRemoving:Connect(function(player: Player)
 			local i = table.find(joined, player)
 			if i then
@@ -862,6 +870,7 @@ while true do
 			t -= 1
 		end
 		leftConn:Disconnect()
+		pjoinConn:Disconnect()
 		for _, conn in next, conns do
 			if conn.Connected then
 				conn:Disconnect()
