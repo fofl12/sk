@@ -81,7 +81,7 @@ local leaderboardban: { string } = {
 	'game_fixing', -- this stupid interfered in a survival mode game (humiliate him)
 }
 
-local _spawn = Instance.new('SpawnLocation', script)
+local _spawn = Instance.new('SpawnLocation', workspace)
 _spawn.Anchored = true
 
 local hats: { number } = {
