@@ -64,6 +64,14 @@ type PlatformThing = {
 	name: string,
 	run: (platform: Part) -> nil
 }
+type Modifier = {
+	name: string,
+	playerEvents: { PlayerEvent }?,
+	platformEvents: { PlatformEvent }?,
+	playerExtra: ((player: Playing) -> nil)?,
+	platformExtra: ((platform: Part) -> nil)?,
+	globalExtra: (() -> nil)?
+}
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -324,7 +332,7 @@ local playerEvents: { PlayerEvent } = {
 				{
 					name = 'Recover health :D!',
 					run = function(c: Character)
-						c.Humanoid.Health += math.random(1, 40)
+						c.Humanoid.Health += math.random(10, 100)
 					end
 				},
 				{
@@ -355,8 +363,11 @@ local playerEvents: { PlayerEvent } = {
 					run = function(c: Character)
 						local ff = Instance.new('ForceField', c)
 						local x = Instance.new('Explosion')
+						x.BlastPressure = 1000
+						x.BlastRadius = 10
 						x.Position = c.Head.Position
 						x.Parent = c.Head
+						Debris:AddItem(x, 1)
 						Debris:AddItem(ff, 1)
 					end
 				}
@@ -435,7 +446,8 @@ local platformEvents: { PlatformEvent } = {
 			})
 			table.insert(ptweens, tween)
 			tween:Play()
-			if platform.Size.Y < -qty then
+			--[[
+			if platform.Size.Y < -qty then -- removed for balance
 				task.delay(t, function()
 					if tween.PlaybackState == Enum.PlaybackState.Cancelled then return end
 					if platform then
@@ -443,6 +455,7 @@ local platformEvents: { PlatformEvent } = {
 					end
 				end)
 			end
+			]]
 			return qty
 		end
 	},
@@ -520,7 +533,12 @@ local platformEvents: { PlatformEvent } = {
 					color = BrickColor.Black(),
 					run = function(part: Part)
 						if math.random() < .5 then return end
-						Instance.new('Explosion', platform).Position = part.Position
+						local x = Instance.new('Explosion')
+						x.BlastPressure = 10000
+						x.BlastRadius = 10
+						x.Position = part.Position
+						x.Parent = platform
+						Debris:AddItem(x, 1)
 					end
 				},
 				{
@@ -683,9 +701,11 @@ local platformEvents: { PlatformEvent } = {
 				if not (new and new.Parent == platform) then return end
 				new.BrickColor = BrickColor.Red()
 				local x = Instance.new('Explosion')
+				x.BlastPressure = 1000
 				x.BlastRadius = 10
 				x.Position = new.Position
 				x.Parent = platform
+				Debris:AddItem(x, 1)
 			end)
 		end
 	},
@@ -788,6 +808,36 @@ local platformEvents: { PlatformEvent } = {
 		end
 	},
 }
+local modifiers: { Modifier } = {
+	{
+		name = 'OnePlate',
+		platformExtra = function(platform: Part)
+			platform.Size = Vector3.new(32, 1, 32)
+		end
+	},
+	{
+		name = 'Universal healthcare',
+		playerExtra = function(player: Playing)
+			local hum = player.Character.Humanoid
+			task.spawn(function()
+				while hum and hum.Health > 0 do
+					hum.Health += 0.5
+					task.wait(1)
+				end
+			end)
+		end
+	},
+	{
+		name = 'Technological advancement',
+		playerEvents = { playerEvents[5], playerEvents[5], playerEvents[5] }, -- this is very bad
+	},
+	{
+		name = 'Anxiety',
+		platformExtra = function(platform: Part)
+			platform.Size = Vector3.one
+		end
+	}
+}
 
 local autojoined: { Player } = {}
 
@@ -865,7 +915,7 @@ while true do
 			for _, player in ipairs(joined) do
 				roster ..= player.DisplayName .. '\n'
 			end
-			gdeclare(`{('\n'):rep(#joined)}\n\ngithub.com/fofl12/sk - Starting the plate of the doom in {t} seconds - Say p%join or p%auto to join\nWant to choose which events happen? Join comsurg's group and purchase the stakeholder t-shirt for 12 robux!\n{roster}`)
+			gdeclare(`{('\n'):rep(#joined)}\n\n - Starting the plate of the doom in {t} seconds - Say p%join or p%auto to join\nWant to choose which events happen? Join comsurg's group and purchase the stakeholder t-shirt for 12 robux!\n{roster}`)
 			task.wait(1)
 			t -= 1
 		end
@@ -889,6 +939,11 @@ while true do
 			if platforms[i] then
 				platforms[i].Transparency = 0.5
 				platforms[i].BrickColor = BrickColor.Red()
+				for _, desc in next, platforms[i]:GetDescendants() do
+					if not desc:IsA('BasePart') then continue end
+					desc.Transparency = 0.5
+					desc.BrickColor = BrickColor.Red()
+				end
 				Debris:AddItem(platforms[i], 3)
 			end
 			platforms[i] = nil
@@ -978,7 +1033,7 @@ while true do
 			new.Color = getChatColor(joined[i].Name)
 			new:SetAttribute('originColor', new.Color)
 			new.Size = Vector3.new(12, 1, 12)
-			new.Position = Vector3.new(0, 50, 0) + Vector3.new(i % w - w / 2, 0, math.floor(i / w) - h / 2) * 20
+			new.Position = Vector3.new(0, 50, 0) + Vector3.new(i % w - w / 2, 0, math.floor(i / w) - h / 2) * 20 + Vector3.yAxis * math.random() * 0.05 -- z fighting fix
 			new.Name = playing[i].DisplayName
 			platforms[i] = new
 			new.Parent = script
@@ -988,6 +1043,48 @@ while true do
 
 		ldeclare('Starting ' .. (if survival then 'Survival mode' else 'Battle royale mode'))
 		task.wait(3)
+
+		local modifierEnabled = math.random() < .6
+		if modifierEnabled then
+			local modifierQty = math.ceil((math.random() ^ 4) * 6)
+			local modifierRoster = {}
+			for i = 1, modifierQty do
+				local modifier = randomElement(modifiers) :: Modifier
+				modifiers[i] = modifier
+				modifierRoster[i] = modifier.name
+				if modifier.playerExtra then
+					for _, player in next, playing do
+						modifier.playerExtra(player)
+					end
+				end
+				if modifier.platformExtra then
+					for _, platform in next, platforms do
+						modifier.platformExtra(platform)
+					end
+				end
+				if modifier.globalExtra then
+					modifier.globalExtra()
+				end
+				if modifier.platformEvents then
+					for _, platform in next, platforms do
+						for _, event in next, modifier.platformEvents do
+							if not event.condition(platform) then continue end
+							event.run(platform)
+						end
+					end
+				end
+				if modifier.playerEvents then
+					for _, player in next, playing do
+						for _, event in next, modifier.playerEvents do
+							--if not event.condition(player) then continue end -- breaks Technological advancement
+							event.run(player)
+						end
+					end
+				end
+			end
+			ldeclare('MODIFIERS: ' .. table.concat(modifierRoster, ' + '))
+			task.wait(3)
+		end
 
 		local rounds = 0
 		local prevEvent: PlayerEvent | PlatformEvent = nil
