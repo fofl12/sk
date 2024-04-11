@@ -915,7 +915,7 @@ while true do
 			for _, player in ipairs(joined) do
 				roster ..= player.DisplayName .. '\n'
 			end
-			gdeclare(`{('\n'):rep(#joined)}\n\n - Starting the plate of the doom in {t} seconds - Say p%join or p%auto to join\nWant to choose which events happen? Join comsurg's group and purchase the stakeholder t-shirt for 12 robux!\n{roster}`)
+			gdeclare(`{('\n'):rep(#joined)}\n\ngithub.com/fofl12/sk - Starting the plate of the doom in {t} seconds - Say p%join or p%auto to join\nWant to choose which events happen? Join comsurg's group and purchase the stakeholder t-shirt for 12 robux!\n{roster}`)
 			task.wait(1)
 			t -= 1
 		end
