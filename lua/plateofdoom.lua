@@ -20,9 +20,6 @@ if getfenv().owner then
 	owner = getfenv().owner
 end
 
--- disable this if you are going to run the script in studio
-local EnableMemoryStoreService = true
-
 
 type PlatformEvent = {
 	text: string,
@@ -80,10 +77,10 @@ local Chat = game:GetService("Chat")
 local MemoryStoreService = game:GetService("MemoryStoreService")
 local PhysicsService = game:GetService("PhysicsService")
 
-local survivalRecord: MemoryStoreQueue = nil
-if EnableMemoryStoreService then
+local survivalRecord: MemoryStoreQueue? = nil
+xpcall(function()
 	survivalRecord = MemoryStoreService:GetQueue('github.com/fofl12/sk - plateofdoom.lua 2', 1)
-end
+end, function() warn('running without MemoryStoreService') end)
 
 local leaderboardban: { string } = {
 	'game_fixing', -- this stupid interfered in a survival mode game (humiliate him)
@@ -165,7 +162,13 @@ local icons: { number } = {
 }
 
 local _gmessage: Hint = nil
+--[[ -- typechecker has a mental breakdown when this is uncommented
+local rig = Players:CreateHumanoidModelFromUserId(owner.UserId)
+rig.Parent = workspace
+rig.Head.CFrame = owner.Character.Head.CFrame
+]]
 local function gdeclare(message: string)
+	--rig.Humanoid.DisplayName = message
 	_gmessage.Text = message
 end
 
@@ -340,6 +343,7 @@ local playerEvents: { PlayerEvent } = {
 					run = function(c: Character)
 						c.Head.Anchored = true
 						task.delay(math.random(6, 30), function()
+							if not (c and c.Head) then return end
 							c.Head.Anchored = false
 						end)
 					end
@@ -1142,7 +1146,7 @@ while true do
 			gdeclare(`{winner.DisplayName} won ! ! !`)
 		elseif survival then
 			gdeclare(`{survivalplayer.DisplayName} survived for {rounds} rounds ! ! !`)
-			if EnableMemoryStoreService and not table.find(leaderboardban, survivalplayer.Name) then
+			if survivalRecord and not table.find(leaderboardban, survivalplayer.Name) then
 				xpcall(function()
 					local records = survivalRecord:ReadAsync(5, false, 0) :: { SurvivalRecord }
 					if not records then
