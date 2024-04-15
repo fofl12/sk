@@ -1,7 +1,8 @@
 -- chat with ai in the comradio revision 2.1
--- cai module made by synarx
+-- cai module (most of this script) made by synarx
 local channel = 'comradio:'
 local tag = 'ai.lua'
+local dementiafix = true -- no idea if this works
 
 local owner: Player = getfenv().owner
 assert(owner, 'wrong environment')
@@ -641,11 +642,15 @@ MessagingService:SubscribeAsync(channel, function(rawData: { Data: ComradioMessa
 		return
 	end
 	if not character then return end
-	local success, response = character:Invoke({ role = 'user', content = `{authorName} says: {data.Content}` })
+	local aiMessage = { role = 'user', content = `{authorName} says: {data.Content}` }
+	local success, response = character:Invoke(aiMessage)
 	if not success then
 		broadcast('Catastrophic failure: ')
 		warn(response)
 		return
 	end
 	broadcast(response.choices[1].message.content)
+	if dementiafix then
+		character:Remember({ aiMessage, response.choices[1].message })
+	end
 end)
