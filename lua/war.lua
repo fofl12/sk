@@ -53,6 +53,11 @@ type Ent = {
 	lastTurn: number,
 	real: Character
 }
+type Hex = {
+	r: number,
+	q: number,
+	s: number
+}
 
 local chars: { CharDescription } = {
 	{
@@ -128,6 +133,7 @@ else
 end
 
 local Players = game:GetService('Players')
+local Debris = game:GetService('Debris')
 
 local rhexsize = 3 -- Functional Programming: BEGONE
 local sq = math.sqrt
@@ -159,7 +165,7 @@ local rhex = {
 		local att = Instance.new('Attachment', mid)
 		--Instance.new('Sparkles', att)
 
-		local repr = {
+		local repr: { mid: Part, group: { BasePart }, att: Attachment } = {
 			mid = mid,
 			group = { mid, w1, w2, w3, w4 },
 			att = att
@@ -200,9 +206,19 @@ local hex = {
 		--return sq((math.abs(a.X - b.X) ^ 2) + (math.abs(a.Y - b.Y) ^ 2) + (math.abs(a.Z - b.Z) ^ 2)) -- if you use this, Do not
 	end,
 	round = function(a: Vector3): Vector3
-		local r, q = math.round(a.X), math.round(a.Y)
-		local s = -r -q
+		local r, q, s = math.round(a.X), math.round(a.Y), math.round(a.Z)
+		local dr, dq, ds = math.abs(a.X - r), math.abs(a.Y - q), math.abs(a.Z, s)
+		if dr > dq and dr > ds then
+			r = -q -s
+		elseif dq > dr and dq > ds then
+			q = -r -s
+		elseif ds > dr and ds > dq then
+			s = -r -q
+		end
 		return Vector3.new(r, q, s)
+	end,
+	f3 = function(a: Vector3): Vector3
+		return Vector3.new(a.X, a.Y, a.Z)
 	end
 }
 
@@ -313,6 +329,7 @@ local uconns: { RBXScriptConnection } = {}
 local autojoined: { Player } = {}
 local mapsize = 12
 while true do
+	task.wait()
 	script:ClearAllChildren()
 	for i, conn in next, uconns do
 		if not conn.Connected then
@@ -403,23 +420,25 @@ while true do
 		--_gmessage:Destroy()
 
 		local cells: { [Vector3]: Cell } = {}
-		local ents = {}
+		local ents: { [Vector3]: Ent } = {}
 
 		local tparams = {
 			scale = math.random() * 3 + 2,
 			offset = math.random() * 5,
 			value = math.random() * 0.03,
-			snowTolerance = math.random() * 0.4,
-			snowSpeed = math.random() * 0.5 + 0.5,
-			sandSpeed = math.random() * 0.5 + 0.5
+			snowTolerance = math.random() * 0.4 + 0.1,
+			snowSpeed = math.random() * 0.4 + 0.6,
+			sandSpeed = math.random() * 0.4 + 0.6
 		}
-		local fold = Instance.new('Folder')
+		--local fmid: Part = nil
+		local rng = math.random() * 500
 		for r = -mapsize, mapsize do
 			for q = -mapsize, mapsize do
+				if q % 4 == 0 then task.wait() end
 				local s = -r -q
 				--if math.abs(r) + math.abs(q) + math.abs(s) > mapsize * 2 then continue end
-				if hex.dist(Vector3.zero, Vector3.new(r, q, s)) > mapsize then continue end
-				local height = math.noise(r / 5, q / 5, s / 5) * tparams.scale + tparams.offset
+				if hex.dist(Vector3.new(), Vector3.new(r, q, s)) > mapsize then continue end
+				local height = math.noise(r / 5 + rng, q / 5 - rng, s / 5 + rng) * tparams.scale + tparams.offset
 				local gold = math.random() < tparams.value
 				local rcell = rhex.new()
 				rcell.Anchored = true
@@ -437,7 +456,7 @@ while true do
 				prompt.ObjectText = 'Cell ' .. utils.hexcode(Vector3.new(r, q), mapsize)
 				prompt.HoldDuration = 0
 				prompt.RequiresLineOfSight = false
-				prompt.Parent = rcell.mid
+				prompt.Parent = rcell.att
 				local voffset = 0
 				if height < 0.5 then
 					rcell.BrickColor = BrickColor.Blue()
@@ -475,10 +494,20 @@ while true do
 					real = rcell
 				}
 				rcell.Position = rhex.position(Vector3.new(r, q)) + origin + Vector3.yAxis * voffset / 2
-				rcell.Parent = fold
+				rcell.Parent = script
 			end
 		end
-		fold.Parent = script
+		--[[
+		local unionPending = {}
+		for pos, cell in next, cells do
+			for _, p in next, cell.real.group do
+				if p == mid then continue end
+				unionPending[#unionPending + 1] = p
+			end
+			task.wait()
+		end
+		local union = fmid:UnionAsync(unionPending, Enum.CollisionFidelity.)
+		]]
 
 		for _ = 1, mapsize * 2 do
 			local pos: Vector3 = nil
@@ -487,6 +516,7 @@ while true do
 				local s = -r -q
 				pos = Vector3.new(r, q, s)
 				task.wait()
+				if math.random() < 0.1 then print('finding', pos, cells[pos]) end
 			end
 			local cell = cells[pos]
 			local dchar = utils.randomElement(chars, { 1 })
@@ -495,7 +525,8 @@ while true do
 				owner = nil,
 				dchar = dchar,
 				hp = dchar.maxhp,
-				real = rig
+				real = rig,
+				lastTurn = -1
 			}
 		end
 
@@ -597,7 +628,6 @@ while true do
 					table.insert(beams, beam)
 					tool.Parent = player.Backpack
 					local hconns: { RBXScriptConnection } = {}
-					task.wait(1)
 					for tpos, tcell in next, cells do
 						local dist = hex.dist(tpos, pos)
 						if dist > (if ents[tpos] then range else speed) or tpos == pos then continue end
@@ -613,9 +643,17 @@ while true do
 						--print(utils.hexcode(tpos, mapsize), '----')
 						for i = 1, dist + 1 do
 							--print(utils.hexcode(hex.round(pos:Lerp(tpos, i / dist)), mapsize))
-							local icell = cells[hex.round(pos:Lerp(tpos, i / (dist + 1)))]
+							local icell = cells[hex.round(hex.f3(pos):Lerp(hex.f3(tpos), i / (dist + 1)))]
+							local p = Instance.new('Part')
+							p.Size = Vector3.one * 0.5
+							p.Anchored = true
+							p.BrickColor = BrickColor.Green()
+							p.Material = Enum.Material.Neon
+							p.Position = rhex.position(hex.round(hex.f3(pos):Lerp(hex.f3(tpos), i / (dist + 1)))) + origin + Vector3.yAxis * (6 + tcell.rheight - (i / 2))
+							p.Parent = script
+							Debris:AddItem(p, 40)
 							local pcell = cells[hex.round(pos:Lerp(tpos, (i - 1) / (dist + 1)))]
-							if not (pcell and icell) then warn('something has gone horribly wrong'); rdist += 9999; break end
+							if not (pcell and icell) then warn('something has gone horribly wrong', hex.round(hex.f3(pos):Lerp(hex.f3(tpos), i / (dist + 1)))); p.BrickColor = BrickColor.Red(); rdist += 9999; break end
 							if icell.snow then
 								rdist += 1 / tparams.snowSpeed
 							elseif icell.sand then
