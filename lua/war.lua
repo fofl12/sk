@@ -28,22 +28,47 @@ type Playing = {
 	color: Color3,
 	name: string
 }
+type Cell = {
+	real: Part,
+	height: number,
+	gold: boolean,
+	sand: boolean,
+	snow: boolean,
+	water: boolean,
+	rheight: number,
+	click: RBXScriptSignal
+}
+type CharDescription = {
+	name: string,
+	outfit: number,
+	maxhp: number,
+	speed: number,
+	attack: number,
+	range: number
+}
+type Ent = {
+	owner: number?,
+	dchar: CharDescription,
+	hp: number,
+	lastTurn: number,
+	real: Character
+}
 
-local chars = {
+local chars: { CharDescription } = {
 	{
 		name = 'King',
 		outfit = 29228213795,
-		maxhp = 500,
+		maxhp = 300,
 		speed = 3,
 		attack = 20,
-		range = 1,
+		range = 3,
 	},
 	{
 		name = 'Warrior',
 		outfit = 29228438216,
 		maxhp = 100,
-		speed = 4,
-		attack = 40,
+		speed = 3,
+		attack = 70,
 		range = 1,
 	},
 	{
@@ -51,7 +76,7 @@ local chars = {
 		outfit = 29228386770,
 		maxhp = 200,
 		speed = 1,
-		attack = 50,
+		attack = 70,
 		range = 3,
 	},
 	{
@@ -59,8 +84,8 @@ local chars = {
 		outfit = 29228336290,
 		maxhp = 150,
 		speed = 4,
-		attack = 60,
-		range = 3,
+		attack = 50,
+		range = 1,
 	},
 	{
 		name = 'Explosive',
@@ -73,17 +98,17 @@ local chars = {
 	{
 		name = 'Archer',
 		outfit = 29228180259,
-		maxhp = 60,
+		maxhp = 80,
 		speed = 3,
-		attack = 50,
-		range = 5,
+		attack = 70,
+		range = 6,
 	},
 	{
 		name = 'Scout',
 		outfit = 29228157425,
 		maxhp = 60,
 		speed = 6,
-		attack = 30,
+		attack = 40,
 		range = 2,
 	},
 }
@@ -173,6 +198,11 @@ local hex = {
 	dist = function(a: Vector3, b: Vector3): number
 		return math.max(math.abs(a.X - b.X), math.abs(a.Y - b.Y), math.abs(a.Z - b.Z))
 		--return sq((math.abs(a.X - b.X) ^ 2) + (math.abs(a.Y - b.Y) ^ 2) + (math.abs(a.Z - b.Z) ^ 2)) -- if you use this, Do not
+	end,
+	round = function(a: Vector3): Vector3
+		local r, q = math.round(a.X), math.round(a.Y)
+		local s = -r -q
+		return Vector3.new(r, q, s)
 	end
 }
 
@@ -180,9 +210,11 @@ local rig: Character = nil
 local utils: { -- the luau moment
 	chatcolor: (name: string) -> Color3,
 	summonrig: (any, pos: Vector3, any, Color3?) -> (),
-	randomElement: <T>(i: { T }, exlude: { number }?) -> (number, T),
+	randomElement: <T>(i: { T }, exlude: { number }?) -> T,
 	gdeclare: (message: string) -> (),
-	b64char: (n: number) -> string
+	b64char: (n: number) -> string,
+	hexcode: (cell: Vector3, mapsize: number) -> string,
+	ownercalc: (cells: { [Vector3]: Cell }, ents: { [Vector3]: Ent }) -> {{ range: number, attack: number, speed: number }}
 } = nil
 utils = {
 	chatcolor = function(name: string): Color3
@@ -232,25 +264,48 @@ utils = {
 	end,
 	gdeclare = function(message: string)
 		if not (rig and rig:FindFirstChild('Humanoid')) then
-			local desc = Players:GetHumanoidDescriptionFromOutfitId(({utils.randomElement(chars)})[2].outfit)
+			local desc = Players:GetHumanoidDescriptionFromOutfitId(utils.randomElement(chars).outfit)
 			rig = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R6) :: Character
-			rig.Parent = script
+			rig.Parent = script -- how do i make my typechecker shut up?
 			rig.Head.CFrame = CFrame.new(origin) + Vector3.yAxis * 6
 		end
 		rig.Humanoid.DisplayName = message
 	end,
-	randomElement = function<T>(i: { T }, exclude: { number }?): (number, T)
+	randomElement = function<T>(i: { T }, exclude: { number }?): T
 		local k = 0
 		while true do
 			local j = math.random(1, #i)
 			local e = i[j]
-			if e and (if exclude then not table.find(exclude, j) else true) then return j, e end
+			if e and (if exclude then not table.find(exclude, j) else true) then return e end
 			k += 1
 			if k % 16 == 0 then task.wait() end
 		end
 	end,
 	b64char = function(n: number): string
 		return ('1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'):sub(n + 1, n + 1)
+	end,
+	hexcode = function(cell: Vector3, mapsize: number): string
+		return utils.b64char(cell.X + mapsize) .. utils.b64char(cell.Y + mapsize)
+	end,
+	ownercalc = function(cells, ents)
+		local ret = {}
+		for pos, ent in next, ents do
+			if ent.dchar.name ~= 'Commander' then continue end
+			if not ent.owner then continue end
+			if not cells[pos].gold then continue end
+			if ret[ent.owner] then
+				ret[ent.owner].range += 2
+				ret[ent.owner].speed += 2
+				ret[ent.owner].attack += 2
+			else
+				ret[ent.owner] = {
+					range = 2,
+					speed = 2,
+					attack = 20
+				}
+			end
+		end
+		return ret
 	end
 }
 
@@ -268,7 +323,7 @@ while true do
 	end
 	local success, err = xpcall(function()
 		local joined: { Player } = table.clone(autojoined)
-		local conns: { RBXScriptConnection } = {}
+		local chatconns: { RBXScriptConnection } = {}
 		local function handlePreGameCommand(player: Player)
 			return function(message: string)
 				if message == 'p%join' then
@@ -297,12 +352,12 @@ while true do
 			end
 		end
 		for i, player: Player in next, Players:GetPlayers() do
-			conns[i] = player.Chatted:Connect(handlePreGameCommand(player))
-			table.insert(uconns, conns[i])
+			chatconns[i] = player.Chatted:Connect(handlePreGameCommand(player))
+			table.insert(uconns, chatconns[i])
 		end
 		local pjoinConn = Players.PlayerAdded:Connect(function(player: Player)
 			local conn = player.Chatted:Connect(handlePreGameCommand(player))
-			table.insert(conns, conn)
+			table.insert(chatconns, conn)
 			table.insert(uconns, conn)
 		end)
 		local leftConn = Players.PlayerRemoving:Connect(function(player: Player)
@@ -333,11 +388,13 @@ while true do
 			end
 			utils.gdeclare(`{('\n'):rep(#joined)}\n\ngithub.com/fofl12/sk - Starting the war in {t} seconds - Say p%join or p%auto to join\n{roster}`)
 			task.wait(1)
-			t -= 1
+			if #joined > 0 then
+				t -= 1
+			end
 		end
 		leftConn:Disconnect()
 		pjoinConn:Disconnect()
-		for _, conn in next, conns do
+		for _, conn in next, chatconns do
 			if conn.Connected then
 				conn:Disconnect()
 			end
@@ -345,10 +402,8 @@ while true do
 		if skipConn then skipConn:Disconnect() end
 		--_gmessage:Destroy()
 
-		local cells = {}
-		local rcells = {}
+		local cells: { [Vector3]: Cell } = {}
 		local ents = {}
-		local rents = {}
 
 		local tparams = {
 			scale = math.random() * 3 + 2,
@@ -358,6 +413,7 @@ while true do
 			snowSpeed = math.random() * 0.5 + 0.5,
 			sandSpeed = math.random() * 0.5 + 0.5
 		}
+		local fold = Instance.new('Folder')
 		for r = -mapsize, mapsize do
 			for q = -mapsize, mapsize do
 				local s = -r -q
@@ -378,7 +434,7 @@ while true do
 				]]
 				local prompt = Instance.new('ProximityPrompt')
 				prompt.ActionText = 'Pick'
-				prompt.ObjectText = 'Cell ' .. utils.b64char(r + mapsize) .. utils.b64char(q + mapsize)
+				prompt.ObjectText = 'Cell ' .. utils.hexcode(Vector3.new(r, q), mapsize)
 				prompt.HoldDuration = 0
 				prompt.RequiresLineOfSight = false
 				prompt.Parent = rcell.mid
@@ -415,13 +471,14 @@ while true do
 					snow = height > 3,
 					sand = height < 1,
 					gold = gold,
-					click = prompt.Triggered
+					click = prompt.Triggered,
+					real = rcell
 				}
 				rcell.Position = rhex.position(Vector3.new(r, q)) + origin + Vector3.yAxis * voffset / 2
-				rcell.Parent = script
-				rcells[Vector3.new(r, q, s)] = rcell
+				rcell.Parent = fold
 			end
 		end
+		fold.Parent = script
 
 		for _ = 1, mapsize * 2 do
 			local pos: Vector3 = nil
@@ -432,14 +489,14 @@ while true do
 				task.wait()
 			end
 			local cell = cells[pos]
-			local id, dchar = utils.randomElement(chars, { 1 })
+			local dchar = utils.randomElement(chars, { 1 })
+			local rig = utils.summonrig(dchar, pos, cell)
 			ents[pos] = {
 				owner = nil,
 				dchar = dchar,
-				hp = dchar.maxhp
+				hp = dchar.maxhp,
+				real = rig
 			}
-			local rig = utils.summonrig(dchar, pos, cell)
-			rents[pos] = rig
 		end
 
 		local playing = {}
@@ -452,24 +509,24 @@ while true do
 				pos = Vector3.new(r, q, s)
 				task.wait()
 			end
-			local name = string.char(math.random(65, 90)) .. ' ' .. ({utils.randomElement(names)})[2]
+			local name = string.char(math.random(65, 90)) .. ' ' .. utils.randomElement(names)
 			playing[i] = {
 				owned = { pos },
 				name = name,
 				kingPos = pos,
 				real = player,
-				color = utils.chatcolor(owner.Name)
+				color = utils.chatcolor(player.Name),
 			}
 			local cell = cells[pos]
 			local dchar = chars[1]
+			local rig = utils.summonrig(dchar, pos, cell, utils.chatcolor(player.Name))
 			ents[pos] = {
 				owner = i,
 				dchar = dchar,
 				hp = dchar.maxhp,
-				lastTurn = -1
+				lastTurn = -1,
+				real = rig
 			}
-			local rig = utils.summonrig(dchar, pos, cell, utils.chatcolor(player.Name))
-			rents[pos] = rig
 			rig.Humanoid.DisplayName = 'King\n' .. name
 			if player.Character and player.Character:FindFirstChild('Head') and player.Character:FindFirstChild('Humanoid') then
 				player.Character.Head.CFrame = rig.Head.CFrame + Vector3.yAxis * 10
@@ -483,22 +540,29 @@ while true do
 		end
 
 		local kings = #playing
+		local function kill(i)
+			kings -= 1
+			local p = playing[i]
+			for _, pos in next, p.owned do
+				if not ents[pos] then continue end
+				ents[pos].owner = nil
+				ents[pos].real.Humanoid.DisplayName = ents[pos].dchar.name
+			end
+			if not ents[p.kingPos] then return end
+			ents[p.kingPos].real:Destroy()
+			ents[p.kingPos].real = nil
+			ents[p.kingPos] = nil
+		end
 		table.insert(uconns, Players.PlayerRemoving:Connect(function(player)
 			for i, p in next, playing do
 				if p.real ~= player then continue end
-				for _, pos in next, p.owned do
-					ents[pos].owner = nil
-					rents[pos].Humanoid.DisplayName = ents[pos].dchar.name
-				end
-				rents[p.kingPos]:Destroy()
-				rents[p.kingPos] = nil
-				ents[p.kingPos] = nil
-				kings -= 1
+				kill(i)
 				break
 			end
 		end))
 		local turn = 0
-		while kings > 0 do
+		local survival = kings == 1
+		while kings > (if survival then 0 else 1) do
 			turn += 1
 			utils.gdeclare('Turn ' .. tostring(turn))
 			task.wait(3)
@@ -507,25 +571,26 @@ while true do
 			local moves = {}
 			local beams = {}
 			local conns = {}
+			local boosts = utils.ownercalc(cells, ents)
 			for pos, ent in next, ents do
 				if not ent.owner then continue end
 				if ent.lastTurn == turn then continue end
+				local range = ent.dchar.range + (if boosts[ent.owner] then boosts[ent.owner].range else 0)
+				local speed = ent.dchar.speed + (if boosts[ent.owner] then boosts[ent.owner].speed else 0)
 				local cell = cells[pos]
-				local rent = rents[pos]
 				local conn = cell.click:Once(function(player: BPlayer)
 					if player ~= playing[ent.owner].real then return end
 					local tool = Instance.new('Tool')
 					tool.Name = ent.dchar.name
 					tool.ToolTip = 'Click a cell to move or drop to transfer ownership'
-					tool.CanBeDropped = ent.dchar.name ~= 'King'
 					tool.Enabled = false
 					local handle = Instance.new('Part')
 					handle.Transparency = 1
 					handle.Name = 'Handle'
-					handle.Position = rent.Head.Position
+					handle.Position = ent.real.Head.Position
 					handle.Parent = tool
 					local beam = Instance.new('Beam', handle)
-					beam.Attachment0 = rent.Head.Attachment
+					beam.Attachment0 = ent.real.Head.Attachment
 					beam.Attachment1 = Instance.new('Attachment', handle)
 					beam.Color = ColorSequence.new(utils.chatcolor(player.Name))
 					beam.FaceCamera = true
@@ -534,9 +599,32 @@ while true do
 					local hconns: { RBXScriptConnection } = {}
 					task.wait(1)
 					for tpos, tcell in next, cells do
-						if hex.dist(tpos, pos) > ent.dchar.speed or tpos == pos then continue end
-						if ent[tpos] and hex.dist(tpos, pos) > ent.dchar.range then continue end
-						local rtcell = rcells[tpos]
+						local dist = hex.dist(tpos, pos)
+						if dist > (if ents[tpos] then range else speed) or tpos == pos then continue end
+						local good = true
+						for _, move in next, moves do
+							if move.to == tpos and not move.interact then
+								good = false
+								break
+							end
+						end
+						if not good then continue end
+						local rdist = 0
+						--print(utils.hexcode(tpos, mapsize), '----')
+						for i = 1, dist + 1 do
+							--print(utils.hexcode(hex.round(pos:Lerp(tpos, i / dist)), mapsize))
+							local icell = cells[hex.round(pos:Lerp(tpos, i / (dist + 1)))]
+							local pcell = cells[hex.round(pos:Lerp(tpos, (i - 1) / (dist + 1)))]
+							if not (pcell and icell) then warn('something has gone horribly wrong'); rdist += 9999; break end
+							if icell.snow then
+								rdist += 1 / tparams.snowSpeed
+							elseif icell.sand then
+								rdist += 1 / tparams.sandSpeed
+							elseif icell.water then
+								rdist += 999999
+							end
+						end
+						if rdist > (if ents[tpos] then range else speed) or tpos == pos then continue end
 						local hconn = tcell.click:Once(function(player)
 							if not tool.Parent:FindFirstChildWhichIsA('Humanoid') then return end
 							local rholder: Player = Players:GetPlayerFromCharacter(tool.Parent)
@@ -550,9 +638,9 @@ while true do
 							end
 							if not holder then return end
 							ent.owner = holder
-							rent.Humanoid.DisplayName = ent.dchar.name .. '\n' .. playing[holder].name
-							beam.Attachment1 = rtcell.att
-							beam.Parent = rtcell.mid
+							ent.real.Humanoid.DisplayName = ent.dchar.name .. '\n' .. playing[holder].name
+							beam.Attachment1 = tcell.real.att
+							beam.Parent = tcell.real.mid
 							table.insert(moves, {
 								from = pos,
 								to = tpos,
@@ -581,49 +669,60 @@ while true do
 				conn:Disconnect()
 			end
 			utils.gdeclare('The moves are being considered')
+			boosts = utils.ownercalc(cells, ents)
 			for _, move in next, moves do -- could be optimized
 				if not move.interact then continue end
 				local fchar = ents[move.from]
 				local tchar = ents[move.to]
+				if not (fchar and tchar) then continue end
 				if fchar.dchar.name == 'King' and not tchar.owner then
 					ents[move.to].owner = fchar.owner
-					rents[move.to].Humanoid.DisplayName = tchar.dchar.name .. '\n' .. playing[fchar.owner].name
+					ents[move.to].real.Humanoid.DisplayName = tchar.dchar.name .. '\n' .. playing[fchar.owner].name
 				elseif fchar.dchar.name == 'Explosive' then
-					ents[move.to].hp -= fchar.dchar.attack
+					ents[move.to].hp -= fchar.dchar.attack + (if boosts[fchar.owner] then boosts[fchar.owner].attack else 0)
 					ents[move.from].hp = 0
 				elseif tchar.dchar.name == 'Explosive' then
-					ents[move.from].hp -= fchar.dchar.attack
+					ents[move.from].hp -= tchar.dchar.attack + (if boosts[tchar.owner] then boosts[tchar.owner].attack else 0)
 					ents[move.to].hp = 0
 				else
-					ents[move.to].hp -= fchar.dchar.attack
+					ents[move.to].hp -= fchar.dchar.attack + (if boosts[fchar.owner] then boosts[fchar.owner].attack else 0)
 				end
+				fchar.real.Humanoid.Health = ents[move.from].hp
+				tchar.real.Humanoid.Health = ents[move.to].hp
 				if ents[move.from].hp <= 0 then
-					if fchar.owner ~= nil then
-						table.remove(playing[fchar.owner].owner, table.find(playing[fchar.owner].owned, move.from))
+					if fchar.dchar.name == 'King' then
+						kill(fchar.owner)
+					else
+						if fchar.owner ~= nil then
+							table.remove(playing[fchar.owner].owned, table.find(playing[fchar.owner].owned, move.from))
+						end
+						ents[move.from].real:Destroy()
+						ents[move.from] = nil
 					end
-					ents[move.from] = nil
-					rents[move.from]:Destroy()
-					rents[move.from] = nil
 				end
 				if ents[move.to].hp <= 0 then
-					if tchar.owner ~= nil then
-						table.remove(playing[tchar.owner].owner, table.find(playing[tchar.owner].owned, move.from))
+					if tchar.dchar.name == 'King' then
+						kill(tchar.owner)
+					else
+						if tchar.owner ~= nil then
+							table.remove(playing[tchar.owner].owned, table.find(playing[tchar.owner].owned, move.from))
+						end
+						ents[move.to].real:Destroy()
+						ents[move.to] = nil
 					end
-					ents[move.to] = nil
-					rents[move.to]:Destroy()
-					rents[move.to] = nil
 				end
 			end
 			for _, move in next, moves do -- could be optimized
 				if move.interact then continue end
 				local fchar = ents[move.from]
+				if not fchar then continue end
+				ents[move.from].real.Head.CFrame = CFrame.new(rhex.position(move.to)) + Vector3.yAxis * (cells[move.to].rheight + 2.5) + origin
 				ents[move.from] = nil
 				ents[move.to] = fchar
-				rents[move.from].Head.CFrame = CFrame.new(rhex.position(move.to)) + Vector3.yAxis * (cells[move.to].rheight + 2.5) + origin
-				rents[move.to] = rents[move.from]
-				rents[move.from] = nil
 			end
 		end
+		utils.gdeclare('Game Over !')
+		task.wait(10)
 	end, function(...)
 		warn(debug.traceback(...))
 	end)
