@@ -36,7 +36,7 @@ type Cell = {
 	snow: boolean,
 	water: boolean,
 	rheight: number,
-	click: RBXScriptSignal
+	click: RBXScriptSignal -- redundancy...
 }
 type CharDescription = {
 	name: string,
@@ -210,16 +210,13 @@ local hex = {
 		local dr, dq, ds = math.abs(a.X - r), math.abs(a.Y - q), math.abs(a.Z, s)
 		if dr > dq and dr > ds then
 			r = -q -s
-		elseif dq > dr and dq > ds then
+		elseif dq > ds then
 			q = -r -s
-		elseif ds > dr and ds > dq then
+		else
 			s = -r -q
 		end
 		return Vector3.new(r, q, s)
 	end,
-	f3 = function(a: Vector3): Vector3
-		return Vector3.new(a.X, a.Y, a.Z)
-	end
 }
 
 local rig: Character = nil
@@ -423,15 +420,16 @@ while true do
 		local ents: { [Vector3]: Ent } = {}
 
 		local tparams = {
-			scale = math.random() * 3 + 2,
-			offset = math.random() * 5,
-			value = math.random() * 0.03,
+			scale = math.random() * 4 + 4,
+			offset = math.random() * 4,
+			value = math.random() * 0.06,
 			snowTolerance = math.random() * 0.4 + 0.1,
-			snowSpeed = math.random() * 0.4 + 0.6,
-			sandSpeed = math.random() * 0.4 + 0.6
+			snowSpeed = 0.6, -- indeterminism: BEGONE
+			sandSpeed = 0.8
 		}
 		--local fmid: Part = nil
 		local rng = math.random() * 500
+		local hsig = Instance.new('BindableEvent', script)
 		for r = -mapsize, mapsize do
 			for q = -mapsize, mapsize do
 				if q % 4 == 0 then task.wait() end
@@ -457,6 +455,9 @@ while true do
 				prompt.HoldDuration = 0
 				prompt.RequiresLineOfSight = false
 				prompt.Parent = rcell.att
+				prompt.Triggered:Connect(function(...)
+					hsig:Fire(Vector3.new(r, q, s), ...)
+				end)
 				local voffset = 0
 				if height < 0.5 then
 					rcell.BrickColor = BrickColor.Blue()
@@ -479,7 +480,7 @@ while true do
 					rcell.Height = height * 1.5
 					voffset = height * 1.5
 				end
-				if gold then
+				if gold and height > 3 then
 					rcell.Color = BrickColor.random().Color
 					rcell.Material = Enum.Material.Foil
 				end
@@ -490,8 +491,8 @@ while true do
 					snow = height > 3,
 					sand = height < 1,
 					gold = gold,
-					click = prompt.Triggered,
-					real = rcell
+					real = rcell,
+					click = prompt.Triggered
 				}
 				rcell.Position = rhex.position(Vector3.new(r, q)) + origin + Vector3.yAxis * voffset / 2
 				rcell.Parent = script
@@ -516,7 +517,7 @@ while true do
 				local s = -r -q
 				pos = Vector3.new(r, q, s)
 				task.wait()
-				if math.random() < 0.1 then print('finding', pos, cells[pos]) end
+				--if math.random() < 0.1 then print('finding', pos, cells[pos]) end
 			end
 			local cell = cells[pos]
 			local dchar = utils.randomElement(chars, { 1 })
@@ -627,10 +628,13 @@ while true do
 					beam.FaceCamera = true
 					table.insert(beams, beam)
 					tool.Parent = player.Backpack
-					local hconns: { RBXScriptConnection } = {}
-					for tpos, tcell in next, cells do
+					local badcache: { Vector3 } = {}
+					local hconn: RBXScriptConnection = nil
+					hconn = hsig.Event:Connect(function(tpos, player)
+						if table.find(badcache, tpos) then return end
+						local tcell = cells[tpos]
 						local dist = hex.dist(tpos, pos)
-						if dist > (if ents[tpos] then range else speed) or tpos == pos then continue end
+						if dist > (if ents[tpos] then range else speed) or tpos == pos then table.insert(badcache, tpos); return end
 						local good = true
 						for _, move in next, moves do
 							if move.to == tpos and not move.interact then
@@ -638,62 +642,50 @@ while true do
 								break
 							end
 						end
-						if not good then continue end
+						if not good then return end
 						local rdist = 0
-						--print(utils.hexcode(tpos, mapsize), '----')
-						for i = 1, dist + 1 do
-							--print(utils.hexcode(hex.round(pos:Lerp(tpos, i / dist)), mapsize))
-							local icell = cells[hex.round(hex.f3(pos):Lerp(hex.f3(tpos), i / (dist + 1)))]
-							local p = Instance.new('Part')
-							p.Size = Vector3.one * 0.5
-							p.Anchored = true
-							p.BrickColor = BrickColor.Green()
-							p.Material = Enum.Material.Neon
-							p.Position = rhex.position(hex.round(hex.f3(pos):Lerp(hex.f3(tpos), i / (dist + 1)))) + origin + Vector3.yAxis * (6 + tcell.rheight - (i / 2))
-							p.Parent = script
-							Debris:AddItem(p, 40)
-							local pcell = cells[hex.round(pos:Lerp(tpos, (i - 1) / (dist + 1)))]
-							if not (pcell and icell) then warn('something has gone horribly wrong', hex.round(hex.f3(pos):Lerp(hex.f3(tpos), i / (dist + 1)))); p.BrickColor = BrickColor.Red(); rdist += 9999; break end
+						for i = 1, dist do
+							local icell = cells[hex.round(pos:Lerp(tpos, i / dist))]
+							local pcell = cells[hex.round(pos:Lerp(tpos, (i - 1) / dist))]
+							if icell.rheight - pcell.rheight > 2 then
+								rdist += 1
+							end
 							if icell.snow then
 								rdist += 1 / tparams.snowSpeed
-							elseif icell.sand then
+							end
+							if icell.sand then
 								rdist += 1 / tparams.sandSpeed
-							elseif icell.water then
+							end
+							if icell.water then
 								rdist += 999999
 							end
 						end
-						if rdist > (if ents[tpos] then range else speed) or tpos == pos then continue end
-						local hconn = tcell.click:Once(function(player)
-							if not tool.Parent:FindFirstChildWhichIsA('Humanoid') then return end
-							local rholder: Player = Players:GetPlayerFromCharacter(tool.Parent)
-							if rholder ~= player then return end
-							local holder = nil
-							for i, ph in next, playing do
-								if ph.real == rholder then
-									holder = i
-									break
-								end
+						if rdist > (if ents[tpos] then range else speed) then table.insert(badcache, tpos); return end
+						if not tool.Parent:FindFirstChildWhichIsA('Humanoid') then return end
+						local rholder: Player = Players:GetPlayerFromCharacter(tool.Parent)
+						if rholder ~= player then return end
+						local holder = nil
+						for i, ph in next, playing do
+							if ph.real == rholder then
+								holder = i
+								break
 							end
-							if not holder then return end
-							ent.owner = holder
-							ent.real.Humanoid.DisplayName = ent.dchar.name .. '\n' .. playing[holder].name
-							beam.Attachment1 = tcell.real.att
-							beam.Parent = tcell.real.mid
-							table.insert(moves, {
-								from = pos,
-								to = tpos,
-								interact = ents[tpos] ~= nil
-							})
-							for _, conn in next, hconns do
-								if not conn.Connected then continue end
-								conn:Disconnect()
-							end
-							tool:Destroy()
-							ent.lastTurn = turn
-						end)
-						table.insert(hconns, hconn)
-						table.insert(uconns, hconn)
-					end
+						end
+						if not holder then return end
+						ent.owner = holder
+						ent.real.Humanoid.DisplayName = ent.dchar.name .. '\n' .. playing[holder].name
+						beam.Attachment1 = tcell.real.att
+						beam.Parent = tcell.real.mid
+						table.insert(moves, {
+							from = pos,
+							to = tpos,
+							interact = ents[tpos] ~= nil
+						})
+						hconn:Disconnect()
+						tool:Destroy()
+						ent.lastTurn = turn
+					end)
+					table.insert(uconns, hconn)
 				end)
 				table.insert(uconns, conn)
 				table.insert(conns, conn)
