@@ -163,6 +163,7 @@ local rhex = {
 		w4.Orientation = Vector3.new(180, 0, -90)
 
 		local att = Instance.new('Attachment', mid)
+		att.CFrame = CFrame.fromEulerAnglesXYZ(0, 0, -math.pi/2)
 		--Instance.new('Sparkles', att)
 
 		local repr: { mid: Part, group: { BasePart }, att: Attachment } = {
@@ -272,6 +273,7 @@ utils = {
 		rig.Humanoid.MaxHealth = dchar.maxhp
 		rig.Humanoid.Health = rig.Humanoid.MaxHealth
 		Instance.new('Attachment', rig.Head)
+		rig.Head.Attachment.CFrame = CFrame.fromEulerAnglesXYZ(0, 0, -math.pi/2)
 		rig.Parent = script
 		return rig
 	end,
@@ -622,8 +624,13 @@ while true do
 					handle.Position = ent.real.Head.Position
 					handle.Parent = tool
 					local beam = Instance.new('Beam', handle)
+					beam.CurveSize0 = -3
+					beam.CurveSize1 = 3
+					beam.Segments = 30
 					beam.Attachment0 = ent.real.Head.Attachment
 					beam.Attachment1 = Instance.new('Attachment', handle)
+					beam.Attachment1.CFrame = CFrame.fromEulerAnglesXYZ(0, 0, -math.pi/2)
+					beam.Attachment1.Visible = true
 					beam.Color = ColorSequence.new(utils.chatcolor(player.Name))
 					beam.FaceCamera = true
 					table.insert(beams, beam)
@@ -648,7 +655,7 @@ while true do
 							local icell = cells[hex.round(pos:Lerp(tpos, i / dist))]
 							local pcell = cells[hex.round(pos:Lerp(tpos, (i - 1) / dist))]
 							if icell.rheight - pcell.rheight > 2 then
-								rdist += 1
+								rdist += icell.rheight - pcell.rheight
 							end
 							if icell.snow then
 								rdist += 1 / tparams.snowSpeed

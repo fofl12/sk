@@ -1,7 +1,7 @@
 -- chat with ai in the comradio revision 2.1
 -- cai module (most of this script) made by synarx
 local channel = 'comradio:'
-local tag = 'ai.lua'
+local tag = 'ai.lua ' .. tostring(math.random(0, 9))
 local dementiafix = true -- no idea if this works
 
 local owner: Player = getfenv().owner
