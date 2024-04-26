@@ -30,11 +30,14 @@ type Playing = {
 }
 type Cell = {
 	real: Part,
+--	ents: { number }, -- entity overhaul (eventually)
+--	builds: {},
 	height: number,
 	gold: boolean,
 	sand: boolean,
 	snow: boolean,
 	water: boolean,
+	build: boolean,
 	rheight: number,
 	click: RBXScriptSignal -- redundancy...
 }
@@ -53,10 +56,9 @@ type Ent = {
 	lastTurn: number,
 	real: Character
 }
-type Hex = {
-	r: number,
-	q: number,
-	s: number
+
+local banned = {
+	'TheStylingAccount'
 }
 
 local chars: { CharDescription } = {
@@ -116,6 +118,14 @@ local chars: { CharDescription } = {
 		attack = 40,
 		range = 2,
 	},
+	{
+		name = 'h Synthesis',
+		outfit = 147030032777,
+		maxhp = 200,
+		speed = 2,
+		attack = 0,
+		range = 0
+	}
 }
 local names = {
 	'collective', 'empire', 'faction', 'republic', 'union'
@@ -228,7 +238,8 @@ local utils: { -- the luau moment
 	gdeclare: (message: string) -> (),
 	b64char: (n: number) -> string,
 	hexcode: (cell: Vector3, mapsize: number) -> string,
-	ownercalc: (cells: { [Vector3]: Cell }, ents: { [Vector3]: Ent }) -> {{ range: number, attack: number, speed: number }}
+	ownercalc: (cells: { [Vector3]: Cell }, ents: { [Vector3]: Ent }) -> {{ range: number, attack: number, speed: number, h: number }},
+	fround: (n: number) -> number
 } = nil
 utils = {
 	chatcolor = function(name: string): Color3
@@ -273,6 +284,11 @@ utils = {
 		rig.Humanoid.MaxHealth = dchar.maxhp
 		rig.Humanoid.Health = rig.Humanoid.MaxHealth
 		Instance.new('Attachment', rig.Head)
+		if dchar.name == 'h Synthesis' then
+			local p = Instance.new('ParticleEmitter', rig.Head)
+			p.Texture = 'rbxassetid://17294399888'
+			p.Enabled = false
+		end
 		rig.Head.Attachment.CFrame = CFrame.fromEulerAnglesXYZ(0, 0, -math.pi/2)
 		rig.Parent = script
 		return rig
@@ -297,7 +313,7 @@ utils = {
 		end
 	end,
 	b64char = function(n: number): string
-		return ('1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'):sub(n + 1, n + 1)
+		return ('234678abcdefhjkmnprstuvwxyzABCDEFHJKMNPRSTUVWXYZ'):sub(n + 1, n + 1)
 	end,
 	hexcode = function(cell: Vector3, mapsize: number): string
 		return utils.b64char(cell.X + mapsize) .. utils.b64char(cell.Y + mapsize)
@@ -305,22 +321,43 @@ utils = {
 	ownercalc = function(cells, ents)
 		local ret = {}
 		for pos, ent in next, ents do
-			if ent.dchar.name ~= 'Commander' then continue end
 			if not ent.owner then continue end
-			if not cells[pos].gold then continue end
-			if ret[ent.owner] then
-				ret[ent.owner].range += 2
-				ret[ent.owner].speed += 2
-				ret[ent.owner].attack += 2
-			else
-				ret[ent.owner] = {
-					range = 2,
-					speed = 2,
-					attack = 20
-				}
+			if ent.dchar.name == 'Commander' then
+				if not cells[pos].gold then continue end
+				if ret[ent.owner] then
+					ret[ent.owner].range += 2
+					ret[ent.owner].speed += 2
+					ret[ent.owner].attack += 2
+				else
+					ret[ent.owner] = {
+						range = 2,
+						speed = 2,
+						attack = 20,
+						h = 0
+					}
+				end
+			elseif ent.dchar.name == 'h Synthesis' then
+				if not cells[pos].build then
+					ent.real.Head.ParticleEmitter.Enabled = false
+					continue
+				end
+				ent.real.Head.ParticleEmitter.Enabled = true
+				if ret[ent.owner] then
+					ret[ent.owner].h += 1
+				else
+					ret[ent.owner] = {
+						range = 0,
+						speed = 0,
+						attack = 0,
+						h = 1
+					}
+				end
 			end
 		end
 		return ret
+	end,
+	fround = function(n: number): number
+		return math.round(n * 10)-- / 10
 	end
 }
 
@@ -341,6 +378,7 @@ while true do
 		local joined: { Player } = table.clone(autojoined)
 		local chatconns: { RBXScriptConnection } = {}
 		local function handlePreGameCommand(player: Player)
+			if table.find(banned, player.Name) then return function() return false end end
 			return function(message: string)
 				if message == 'p%join' then
 					local j = table.find(joined, player)
@@ -422,8 +460,8 @@ while true do
 		local ents: { [Vector3]: Ent } = {}
 
 		local tparams = {
-			scale = math.random() * 4 + 4,
-			offset = math.random() * 4,
+			scale = math.random() * 4.5 + 3.5,
+			offset = math.random() * 3.5,
 			value = math.random() * 0.06,
 			snowTolerance = math.random() * 0.4 + 0.1,
 			snowSpeed = 0.6, -- indeterminism: BEGONE
@@ -439,7 +477,8 @@ while true do
 				--if math.abs(r) + math.abs(q) + math.abs(s) > mapsize * 2 then continue end
 				if hex.dist(Vector3.new(), Vector3.new(r, q, s)) > mapsize then continue end
 				local height = math.noise(r / 5 + rng, q / 5 - rng, s / 5 + rng) * tparams.scale + tparams.offset
-				local gold = math.random() < tparams.value
+				local gold = math.random() < tparams.value and height > 3
+				local build = height > 0.5 and math.random() < 0.02 and not gold
 				local rcell = rhex.new()
 				rcell.Anchored = true
 				--[[ -- tragedy...
@@ -451,15 +490,6 @@ while true do
 					table.insert(uconns, conn)
 				end
 				]]
-				local prompt = Instance.new('ProximityPrompt')
-				prompt.ActionText = 'Pick'
-				prompt.ObjectText = 'Cell ' .. utils.hexcode(Vector3.new(r, q), mapsize)
-				prompt.HoldDuration = 0
-				prompt.RequiresLineOfSight = false
-				prompt.Parent = rcell.att
-				prompt.Triggered:Connect(function(...)
-					hsig:Fire(Vector3.new(r, q, s), ...)
-				end)
 				local voffset = 0
 				if height < 0.5 then
 					rcell.BrickColor = BrickColor.Blue()
@@ -482,10 +512,22 @@ while true do
 					rcell.Height = height * 1.5
 					voffset = height * 1.5
 				end
-				if gold and height > 3 then
+				if gold then
 					rcell.Color = BrickColor.random().Color
 					rcell.Material = Enum.Material.Foil
+				elseif build then
+					rcell.Color = BrickColor.Gray().Color
+					rcell.Material = Enum.Material.DiamondPlate
 				end
+				local prompt = Instance.new('ProximityPrompt')
+				prompt.ActionText = if gold then 'The good' elseif build then 'Industrial sector' elseif height < 0.5 then 'Water' else 'Pick'
+				prompt.ObjectText = `Cell {utils.hexcode(Vector3.new(r, q), mapsize)} - Elevation {utils.fround(voffset)}`
+				prompt.HoldDuration = 0
+				prompt.RequiresLineOfSight = false
+				prompt.Parent = rcell.att
+				prompt.Triggered:Connect(function(...)
+					hsig:Fire(Vector3.new(r, q, s), ...)
+				end)
 				cells[Vector3.new(r, q, s)] = {
 					height = height,
 					rheight = voffset,
@@ -493,6 +535,7 @@ while true do
 					snow = height > 3,
 					sand = height < 1,
 					gold = gold,
+					build = build,
 					real = rcell,
 					click = prompt.Triggered
 				}
@@ -536,6 +579,17 @@ while true do
 		local playing = {}
 		local votes = 0
 		for i, player in next, joined do
+			local ls = player:FindFirstChild('leaderstats')
+			if not ls then
+				ls = Instance.new('Folder', player)
+				ls.Name = 'leaderstats'
+			end
+			local hc = ls:FindFirstChild('h')
+			if not hc then
+				hc = Instance.new('IntValue', ls)
+				hc.Name = 'h'
+			end
+			hc.Value = 0
 			local pos: Vector3 = nil
 			while (not cells[pos]) or ents[pos] or cells[pos].water or (cells[pos].snow and math.random() < tparams.snowTolerance) do
 				local r, q = math.random(-mapsize, mapsize), math.random(-mapsize, mapsize)
@@ -626,7 +680,7 @@ while true do
 					local beam = Instance.new('Beam', handle)
 					beam.CurveSize0 = -3
 					beam.CurveSize1 = 3
-					beam.Segments = 30
+					beam.Segments = 60 -- ?!?!
 					beam.Attachment0 = ent.real.Head.Attachment
 					beam.Attachment1 = Instance.new('Attachment', handle)
 					beam.Attachment1.CFrame = CFrame.fromEulerAnglesXYZ(0, 0, -math.pi/2)
@@ -668,6 +722,7 @@ while true do
 							end
 						end
 						if rdist > (if ents[tpos] then range else speed) then table.insert(badcache, tpos); return end
+						if not tool.Parent then return end -- ???
 						if not tool.Parent:FindFirstChildWhichIsA('Humanoid') then return end
 						local rholder: Player = Players:GetPlayerFromCharacter(tool.Parent)
 						if rholder ~= player then return end
@@ -757,6 +812,14 @@ while true do
 				ents[move.from] = nil
 				ents[move.to] = fchar
 			end
+			local iWin = false
+			for i, boost in next, boosts do
+				playing[i].real.leaderstats.h.Value += boost.h
+				if playing[i].real.leaderstats.h.Value >= 100 then
+					iWin = true
+				end
+			end
+			if iWin then break end
 		end
 		utils.gdeclare('Game Over !')
 		task.wait(10)
