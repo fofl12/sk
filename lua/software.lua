@@ -23,6 +23,7 @@ chatText.BorderSizePixel = 0
 chatText.TextXAlignment = 'Left'
 chatText.RichText = true
 chatText.BackgroundTransparency = 1
+chatText.TextEditable = false
 chatText.TextColor3 = Color3.new(1, 1, 1)
 chatText.Size = UDim2.fromScale(1 / columns, 1 / rows)
 chatText.TextScaled = true
@@ -204,6 +205,7 @@ local cmap = {
 	Slash = '/',
 	Space = ' '
 }
+local lines = {}
 local function input()
 	local message = ''
 	local done = false
@@ -274,8 +276,10 @@ after 0 ticks: 0
 after 4 ticks: 1
 after 5 ticks: repeat
 
-Additionally, when i0 is enabled, the component must not output 1, otherwise horrible things will happen.]],
-		check = ""
+Additionally, when i0 is 1, the component must not output 1, otherwise horrible things will happen.]],
+		check = {
+			i0 = '0001003001'
+		}
 	},
 }
 
@@ -285,6 +289,13 @@ for i, mission in ipairs(missions) do
 	out('Input ok to continue\n')
 	while input() ~= 'ok' do task.wait() end
 	utils.clear()
-	
+	while true do
+		local inp = input()
+		if inp == '--!run' then
+			out('what\n')
+		else
+			
+		end
+	end
 end
 out('You win!')

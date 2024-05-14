@@ -6,6 +6,8 @@
 	the hexagons were made possible by the saint that wrote this: https://www.redblobgames.com/grids/hexagons/
 
 	contributions to the pre-game settings by ryry (copied from plateofdoom.lua)
+
+	cat assets from android 11 under apache license
 ]]
 
 type Character = Model & {
@@ -133,7 +135,7 @@ local names = {
 
 local origin = Vector3.zero
 local owner: Owner = getfenv().owner
-if owner then -- this breaks when the owner doesn't have a character but im too lazy to fix it
+if owner and owner.Character and owner.Character:FindFirstChild('Head') then
 	origin = owner.Character.Head.Position - Vector3.yAxis * 4.5
 else
 	local ray = workspace:Raycast(Vector3.yAxis * 100, Vector3.yAxis * -200)
@@ -638,7 +640,6 @@ while true do
 			end
 			if not ents[p.kingPos] then return end
 			ents[p.kingPos].real:Destroy()
-			ents[p.kingPos].real = nil
 			ents[p.kingPos] = nil
 		end
 		table.insert(uconns, Players.PlayerRemoving:Connect(function(player)
