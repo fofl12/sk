@@ -1,3 +1,4 @@
+--!strict
 assert(getfenv().owner, 'wrong environment')
 local function cartgen()
 	local model = Instance.new('Model')

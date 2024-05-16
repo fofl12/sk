@@ -41,7 +41,8 @@ type Cell = {
 	water: boolean,
 	build: boolean,
 	rheight: number,
-	click: RBXScriptSignal -- redundancy...
+	click: RBXScriptSignal, -- redundancy...
+	prompt: ProximityPrompt
 }
 type CharDescription = {
 	name: string,
@@ -151,8 +152,8 @@ local rhexsize = 3 -- Functional Programming: BEGONE
 local sq = math.sqrt
 local rhex = {
 	position = function(coord: Vector3): Vector3
-		local rv, qv = Vector3.new(3/2, 0, sq(3)/2), Vector3.new(0, 0, sq(3))
-		return (coord.X * rv + coord.Y * qv) * rhexsize
+		local qv, rv = Vector3.new(3/2, 0, sq(3)/2), Vector3.new(0, 0, sq(3))
+		return (coord.X * qv + coord.Y * rv) * rhexsize
 	end,
 	new = function()
 		local mid = Instance.new('Part')
@@ -211,6 +212,14 @@ local rhex = {
 		repr.BottomSurface = Enum.SurfaceType.Smooth
 
 		return repr
+	end,
+	vis = function(pos: Vector3, dir: number)
+		local vis = Instance.new('Part')
+		vis.Anchored = true
+		vis.Size = Vector3.new(0.2, 0.2, 3)
+		vis.CFrame = CFrame.new(pos + origin + Vector3.yAxis * 5) * CFrame.fromEulerAnglesYXZ(0, dir, 0)
+		vis.Parent = script
+		Debris:AddItem(vis, 120)
 	end
 }
 local hex = {
@@ -219,8 +228,8 @@ local hex = {
 		--return sq((math.abs(a.X - b.X) ^ 2) + (math.abs(a.Y - b.Y) ^ 2) + (math.abs(a.Z - b.Z) ^ 2)) -- if you use this, Do not
 	end,
 	round = function(a: Vector3): Vector3
-		local r, q, s = math.round(a.X), math.round(a.Y), math.round(a.Z)
-		local dr, dq, ds = math.abs(a.X - r), math.abs(a.Y - q), math.abs(a.Z, s)
+		local q, r, s = math.round(a.X), math.round(a.Y), math.round(a.Z)
+		local dq, dr, ds = math.abs(a.X - r), math.abs(a.Y - q), math.abs(a.Z - s)
 		if dr > dq and dr > ds then
 			r = -q -s
 		elseif dq > ds then
@@ -228,8 +237,14 @@ local hex = {
 		else
 			s = -r -q
 		end
-		return Vector3.new(r, q, s)
+		return Vector3.new(q, r, s)
 	end,
+	angle = function(a: Vector3, b: Vector3): number
+		local ra, rb = rhex.position(a), rhex.position(b)
+		--local ra, rb = a, b
+		local dir = rb - ra
+		return -math.atan2(dir.Z, dir.X) - math.pi * (1/2) -- ??????
+	end
 }
 
 local rig: Character = nil
@@ -472,13 +487,12 @@ while true do
 		--local fmid: Part = nil
 		local rng = math.random() * 500
 		local hsig = Instance.new('BindableEvent', script)
-		for r = -mapsize, mapsize do
-			for q = -mapsize, mapsize do
+		for q = -mapsize, mapsize do
+			for r = -mapsize, mapsize do
 				if q % 4 == 0 then task.wait() end
 				local s = -r -q
-				--if math.abs(r) + math.abs(q) + math.abs(s) > mapsize * 2 then continue end
-				if hex.dist(Vector3.new(), Vector3.new(r, q, s)) > mapsize then continue end
-				local height = math.noise(r / 5 + rng, q / 5 - rng, s / 5 + rng) * tparams.scale + tparams.offset
+				if hex.dist(Vector3.new(), Vector3.new(q, r, s)) > mapsize then continue end
+				local height = math.noise(q / 5 + rng, r / 5 - rng, s / 5 + rng) * tparams.scale + tparams.offset
 				local gold = math.random() < tparams.value and height > 3
 				local build = height > 0.5 and math.random() < 0.02 and not gold
 				local rcell = rhex.new()
@@ -523,25 +537,26 @@ while true do
 				end
 				local prompt = Instance.new('ProximityPrompt')
 				prompt.ActionText = if gold then 'The good' elseif build then 'Industrial sector' elseif height < 0.5 then 'Water' else 'Pick'
-				prompt.ObjectText = `Cell {utils.hexcode(Vector3.new(r, q), mapsize)} - Elevation {utils.fround(voffset)}`
+				prompt.ObjectText = `Cell {utils.hexcode(Vector3.new(q, r), mapsize)} - Elevation {utils.fround(voffset)}`
 				prompt.HoldDuration = 0
 				prompt.RequiresLineOfSight = false
 				prompt.Parent = rcell.att
 				prompt.Triggered:Connect(function(...)
-					hsig:Fire(Vector3.new(r, q, s), ...)
+					hsig:Fire(Vector3.new(q, r, s), ...)
 				end)
-				cells[Vector3.new(r, q, s)] = {
+				cells[Vector3.new(q, r, s)] = {
 					height = height,
 					rheight = voffset,
 					water = height < 0.5,
 					snow = height > 3,
-					sand = height < 1,
+					sand = height < 1 and height > 0.5,
 					gold = gold,
 					build = build,
 					real = rcell,
-					click = prompt.Triggered
+					click = prompt.Triggered,
+					prompt = prompt
 				}
-				rcell.Position = rhex.position(Vector3.new(r, q)) + origin + Vector3.yAxis * voffset / 2
+				rcell.Position = rhex.position(Vector3.new(q, r)) + origin + Vector3.yAxis * voffset / 2
 				rcell.Parent = script
 			end
 		end
@@ -560,9 +575,9 @@ while true do
 		for _ = 1, mapsize * 2 do
 			local pos: Vector3 = nil
 			while (not cells[pos]) or ents[pos] or cells[pos].water or (cells[pos].snow and math.random() < tparams.snowTolerance) do
-				local r, q = math.random(-mapsize, mapsize), math.random(-mapsize, mapsize)
+				local q, r = math.random(-mapsize, mapsize), math.random(-mapsize, mapsize)
 				local s = -r -q
-				pos = Vector3.new(r, q, s)
+				pos = Vector3.new(q, r, s)
 				task.wait()
 				--if math.random() < 0.1 then print('finding', pos, cells[pos]) end
 			end
@@ -594,9 +609,9 @@ while true do
 			hc.Value = 0
 			local pos: Vector3 = nil
 			while (not cells[pos]) or ents[pos] or cells[pos].water or (cells[pos].snow and math.random() < tparams.snowTolerance) do
-				local r, q = math.random(-mapsize, mapsize), math.random(-mapsize, mapsize)
+				local q, r = math.random(-mapsize, mapsize), math.random(-mapsize, mapsize)
 				local s = -r -q
-				pos = Vector3.new(r, q, s)
+				pos = Vector3.new(q, r, s)
 				task.wait()
 			end
 			local name = string.char(math.random(65, 90)) .. ' ' .. utils.randomElement(names)
@@ -651,6 +666,8 @@ while true do
 		end))
 		local turn = 0
 		local survival = kings == 1
+		local hSynth = 0
+		local seaLevel = .5
 		while kings > (if survival then 0 else 1) do
 			turn += 1
 			utils.gdeclare('Turn ' .. tostring(turn))
@@ -709,7 +726,7 @@ while true do
 						for i = 1, dist do
 							local icell = cells[hex.round(pos:Lerp(tpos, i / dist))]
 							local pcell = cells[hex.round(pos:Lerp(tpos, (i - 1) / dist))]
-							if icell.rheight - pcell.rheight > 2 then
+							if icell.rheight - pcell.rheight > 2.5 then
 								rdist += icell.rheight - pcell.rheight
 							end
 							if icell.snow then
@@ -768,6 +785,7 @@ while true do
 				local fchar = ents[move.from]
 				local tchar = ents[move.to]
 				if not (fchar and tchar) then continue end
+				ents[move.from].real.Head.CFrame = CFrame.new(rhex.position(move.from)) * CFrame.fromEulerAnglesYXZ(0, hex.angle(move.from, move.to), 0) + Vector3.yAxis * (cells[move.from].rheight + 2.5)  + origin
 				if fchar.dchar.name == 'King' and not tchar.owner then
 					ents[move.to].owner = fchar.owner
 					ents[move.to].real.Humanoid.DisplayName = tchar.dchar.name .. '\n' .. playing[fchar.owner].name
@@ -809,18 +827,54 @@ while true do
 				if move.interact then continue end
 				local fchar = ents[move.from]
 				if not fchar then continue end
-				ents[move.from].real.Head.CFrame = CFrame.new(rhex.position(move.to)) + Vector3.yAxis * (cells[move.to].rheight + 2.5) + origin
+				ents[move.from].real.Head.CFrame = CFrame.new(rhex.position(move.to)) * CFrame.fromEulerAnglesYXZ(0, hex.angle(move.from, move.to), 0) + Vector3.yAxis * (cells[move.to].rheight + 2.5)  + origin
 				ents[move.from] = nil
 				ents[move.to] = fchar
 			end
 			local iWin = false
 			for i, boost in next, boosts do
 				playing[i].real.leaderstats.h.Value += boost.h
+				hSynth += boost.h
 				if playing[i].real.leaderstats.h.Value >= 100 then
 					iWin = true
 				end
 			end
 			if iWin then break end
+			if hSynth > 3 then
+				seaLevel += hSynth / 10
+				hSynth = 0
+				for pos, cell in next, cells do
+					--if cell.sand then print(cell.height, seaLevel) end
+					if cell.height > seaLevel + .5 then continue end
+					if cell.height > seaLevel and cell.real.BrickColor ~= BrickColor.Red() then
+						cell.real.BrickColor = BrickColor.Red()
+						continue
+					end
+					cell.height = seaLevel
+					cell.real.Height = seaLevel
+					cell.real.Position = rhex.position(pos) + origin + Vector3.yAxis * seaLevel / 2
+					cell.prompt.ObjectText = `Cell {utils.hexcode(pos, mapsize)} - Elevation {utils.fround(seaLevel)}`
+					if cell.water then continue end
+					cell.prompt.ActionText = 'Water'
+					cell.water = true
+					cell.gold = false
+					cell.sand = false
+					cell.snow = false
+					cell.build = false
+					cell.real.BrickColor = BrickColor.Blue()
+					cell.real.Material = Enum.Material.Glass
+					if not ents[pos] then continue end
+					if ents[pos].dchar.name == 'King' then
+						kill(ents[pos].owner)
+					else
+						if ents[pos].owner ~= nil then
+							table.remove(playing[ents[pos].owner].owned, table.find(playing[ents[pos].owner].owned, pos))
+						end
+						ents[pos].real:Destroy()
+						ents[pos] = nil
+					end
+				end
+			end
 		end
 		utils.gdeclare('Game Over !')
 		task.wait(10)
