@@ -42,7 +42,8 @@ type Cell = {
 	build: boolean,
 	rheight: number,
 	click: RBXScriptSignal, -- redundancy...
-	prompt: ProximityPrompt
+	prompt: ProximityPrompt,
+	biome: Color3
 }
 type CharDescription = {
 	name: string,
@@ -303,6 +304,7 @@ utils = {
 		Instance.new('Attachment', rig.Head)
 		if dchar.name == 'h Synthesis' then
 			local p = Instance.new('ParticleEmitter', rig.Head)
+			p.Rate /= 5 -- idk
 			p.Texture = 'rbxassetid://17294399888'
 			p.Enabled = false
 		end
@@ -477,24 +479,29 @@ while true do
 		local ents: { [Vector3]: Ent } = {}
 
 		local tparams = {
-			scale = math.random() * 4.5 + 3.5,
-			offset = math.random() * 3.5,
-			value = math.random() * 0.06,
+			scale = math.random() * 4 + 3,
+			offset = math.random() * 3,
+			value = 0.02,
 			snowTolerance = math.random() * 0.4 + 0.1,
-			snowSpeed = 0.6, -- indeterminism: BEGONE
-			sandSpeed = 0.8
+			snowSpeed = 0.8, -- indeterminism: BEGONE
 		}
-		--local fmid: Part = nil
 		local rng = math.random() * 500
+		local hBiome = Color3.new(math.random(), math.random(), math.random())
+		--local fmid: Part = nil
 		local hsig = Instance.new('BindableEvent', script)
 		for q = -mapsize, mapsize do
 			for r = -mapsize, mapsize do
 				if q % 4 == 0 then task.wait() end
 				local s = -r -q
 				if hex.dist(Vector3.new(), Vector3.new(q, r, s)) > mapsize then continue end
-				local height = math.noise(q / 5 + rng, r / 5 - rng, s / 5 + rng) * tparams.scale + tparams.offset
+				local biome = Color3.new(math.noise(r / 20 + rng, q / 20, s / 20) / 2 + .5, math.noise(r / 20 + rng, q / 20 + rng, s / 20) / 2 + .5, math.noise(r / 20 + rng, q / 20, s / 20 + rng) / 2 + .5):Lerp(hBiome, rng / 600)
+				local lparams = {
+					scale = tparams.scale - biome.G,
+					offset = tparams.offset + biome.B * 2 - biome.R,
+				}
+				local height = math.noise(r / 5 + rng, q / 5 - rng, s / 5 + rng) * lparams.scale + lparams.offset
 				local gold = math.random() < tparams.value and height > 3
-				local build = height > 0.5 and math.random() < 0.02 and not gold
+				local build = height > 0.5 and math.random() < 0.01 + (biome.R - 0.4) / 6 and not gold
 				local rcell = rhex.new()
 				rcell.Anchored = true
 				--[[ -- tragedy...
@@ -507,18 +514,25 @@ while true do
 				end
 				]]
 				local voffset = 0
-				if height < 0.5 then
+				if height < 0.5 and biome.B > 0.6 then
+					rcell.Color = Color3.new(0.019608, 0.086275, 0.305882)
+					rcell.Material = Enum.Material.Glass
+					rcell.Reflectance = 0.9
+					rcell.Height = 0.5
+					voffset = 0.5
+				elseif height < 0.5 then
 					rcell.BrickColor = BrickColor.Blue()
 					rcell.Material = Enum.Material.Glass
+					rcell.Reflectance = 0.4
 					rcell.Height = 0.5
 					voffset = 0.5
 				elseif height < 1 then
-					rcell.BrickColor = BrickColor.Yellow()
+					rcell.Color = BrickColor.Yellow().Color:Lerp(biome, 0.4)
 					rcell.Material = Enum.Material.Sand
 					rcell.Height = height
 					voffset = height
-				elseif height < 3 then
-					rcell.Color = Color3.new(0.278431, 0.525490, 0.215686):Lerp(Color3.new(0.074510, 0.266667, 0.066667), (height - 1) / 5)
+				elseif height < 3 + math.max(0, biome.B - 0.5) * 2 then
+					rcell.Color = (Color3.new(0.278431, 0.525490, 0.215686):Lerp(Color3.new(0.074510, 0.266667, 0.066667), (height - 1) / 5)):Lerp(biome, 0.4)
 					rcell.Material = Enum.Material.Grass
 					rcell.Height = height
 					voffset = height
@@ -529,14 +543,14 @@ while true do
 					voffset = height * 1.5
 				end
 				if gold then
-					rcell.Color = BrickColor.random().Color
+					rcell.Color = biome
 					rcell.Material = Enum.Material.Foil
 				elseif build then
 					rcell.Color = BrickColor.Gray().Color
 					rcell.Material = Enum.Material.DiamondPlate
 				end
 				local prompt = Instance.new('ProximityPrompt')
-				prompt.ActionText = if gold then 'The good' elseif build then 'Industrial sector' elseif height < 0.5 then 'Water' else 'Pick'
+				prompt.ActionText = if gold then 'The good' elseif build then 'Industrial sector' elseif height < 0.5 and biome.B > 0.6 then 'Frozen' elseif height < 0.5 then 'Water' else 'Pick'
 				prompt.ObjectText = `Cell {utils.hexcode(Vector3.new(q, r), mapsize)} - Elevation {utils.fround(voffset)}`
 				prompt.HoldDuration = 0
 				prompt.RequiresLineOfSight = false
@@ -547,14 +561,15 @@ while true do
 				cells[Vector3.new(q, r, s)] = {
 					height = height,
 					rheight = voffset,
-					water = height < 0.5,
+					water = height < 0.5 and biome.B < 0.8,
 					snow = height > 3,
 					sand = height < 1 and height > 0.5,
 					gold = gold,
 					build = build,
 					real = rcell,
 					click = prompt.Triggered,
-					prompt = prompt
+					prompt = prompt,
+					biome = biome
 				}
 				rcell.Position = rhex.position(Vector3.new(q, r)) + origin + Vector3.yAxis * voffset / 2
 				rcell.Parent = script
@@ -571,6 +586,7 @@ while true do
 		end
 		local union = fmid:UnionAsync(unionPending, Enum.CollisionFidelity.)
 		]]
+		rig.Head.CFrame += Vector3.yAxis * 20
 
 		for _ = 1, mapsize * 2 do
 			local pos: Vector3 = nil
@@ -583,7 +599,7 @@ while true do
 			end
 			local cell = cells[pos]
 			local dchar = utils.randomElement(chars, { 1 })
-			local rig = utils.summonrig(dchar, pos, cell)
+			local rig = utils.summonrig(dchar, pos, cell, cell.biome)
 			ents[pos] = {
 				owner = nil,
 				dchar = dchar,
@@ -594,7 +610,6 @@ while true do
 		end
 
 		local playing = {}
-		local votes = 0
 		for i, player in next, joined do
 			local ls = player:FindFirstChild('leaderstats')
 			if not ls then
@@ -637,11 +652,6 @@ while true do
 				player.Character.Head.CFrame = rig.Head.CFrame + Vector3.yAxis * 10
 				player.Character.Humanoid.DisplayName = name
 			end
-			table.insert(uconns, player.Chatted:Connect(function(message: string) 
-				if message == 'p%done' then
-					votes += 1 -- this needs to be fixed (urgently)
-				end
-			end))
 		end
 
 		local kings = #playing
@@ -671,13 +681,25 @@ while true do
 		while kings > (if survival then 0 else 1) do
 			turn += 1
 			utils.gdeclare('Turn ' .. tostring(turn))
-			task.wait(3)
-			utils.gdeclare('Say p%done to complete turn ' .. tostring(turn))
-			votes = 0
+			local votes = 0
 			local moves = {}
 			local beams = {}
 			local conns = {}
 			local boosts = utils.ownercalc(cells, ents)
+			for _, player in next, playing do
+				local dTool = Instance.new('Tool')
+				dTool.Name = `End turn\nTurn {turn}`
+				dTool.Activated:Once(function()
+					votes += 1
+					dTool:Destroy()
+				end)
+				local handle = Instance.new('Part', dTool)
+				handle.Size = Vector3.one
+				handle.Transparency = 1
+				handle.Name = 'Handle'
+				Instance.new('Sparkles', handle)
+				dTool.Parent = player.real.Backpack
+			end
 			for pos, ent in next, ents do
 				if not ent.owner then continue end
 				if ent.lastTurn == turn then continue end
@@ -698,7 +720,7 @@ while true do
 					local beam = Instance.new('Beam', handle)
 					beam.CurveSize0 = -3
 					beam.CurveSize1 = 3
-					beam.Segments = 60 -- ?!?!
+					beam.Segments = 30 -- ?!?!
 					beam.Attachment0 = ent.real.Head.Attachment
 					beam.Attachment1 = Instance.new('Attachment', handle)
 					beam.Attachment1.CFrame = CFrame.fromEulerAnglesXYZ(0, 0, -math.pi/2)
@@ -722,22 +744,24 @@ while true do
 							end
 						end
 						if not good then return end
-						local rdist = 0
-						for i = 1, dist do
-							local icell = cells[hex.round(pos:Lerp(tpos, i / dist))]
-							local pcell = cells[hex.round(pos:Lerp(tpos, (i - 1) / dist))]
+						local rdist = dist
+						local ppos = tpos
+						for i = 1, dist + 1 do
+							local ipos = hex.round(pos:Lerp(tpos, i / (dist + 1)))
+							if ipos == ppos then continue end
+							local icell = cells[hex.round(pos:Lerp(tpos, i / (dist + 1)))]
+							local pcell = cells[ppos]
 							if icell.rheight - pcell.rheight > 2.5 then
 								rdist += icell.rheight - pcell.rheight
 							end
 							if icell.snow then
 								rdist += 1 / tparams.snowSpeed
 							end
-							if icell.sand then
-								rdist += 1 / tparams.sandSpeed
-							end
-							if icell.water then
+							if icell.water and pcell.water then
 								rdist += 999999
+								break
 							end
+							ppos = ipos
 						end
 						if rdist > (if ents[tpos] then range else speed) then table.insert(badcache, tpos); return end
 						if not tool.Parent then return end -- ???
@@ -785,18 +809,20 @@ while true do
 				local fchar = ents[move.from]
 				local tchar = ents[move.to]
 				if not (fchar and tchar) then continue end
+				local fatk = (if boosts[fchar.owner] then boosts[fchar.owner].attack else 0)
+				local tatk = (if boosts[tchar.owner] then boosts[tchar.owner].attack else 0)
 				ents[move.from].real.Head.CFrame = CFrame.new(rhex.position(move.from)) * CFrame.fromEulerAnglesYXZ(0, hex.angle(move.from, move.to), 0) + Vector3.yAxis * (cells[move.from].rheight + 2.5)  + origin
 				if fchar.dchar.name == 'King' and not tchar.owner then
 					ents[move.to].owner = fchar.owner
 					ents[move.to].real.Humanoid.DisplayName = tchar.dchar.name .. '\n' .. playing[fchar.owner].name
 				elseif fchar.dchar.name == 'Explosive' then
-					ents[move.to].hp -= fchar.dchar.attack + (if boosts[fchar.owner] then boosts[fchar.owner].attack else 0)
+					ents[move.to].hp -= fchar.dchar.attack + fatk
 					ents[move.from].hp = 0
 				elseif tchar.dchar.name == 'Explosive' then
-					ents[move.from].hp -= tchar.dchar.attack + (if boosts[tchar.owner] then boosts[tchar.owner].attack else 0)
+					ents[move.from].hp -= tchar.dchar.attack + tatk
 					ents[move.to].hp = 0
 				else
-					ents[move.to].hp -= fchar.dchar.attack + (if boosts[fchar.owner] then boosts[fchar.owner].attack else 0)
+					ents[move.to].hp -= fchar.dchar.attack + fatk
 				end
 				fchar.real.Humanoid.Health = ents[move.from].hp
 				tchar.real.Humanoid.Health = ents[move.to].hp
@@ -841,13 +867,16 @@ while true do
 			end
 			if iWin then break end
 			if hSynth > 3 then
-				seaLevel += hSynth / 10
+				local increase = math.ceil(hSynth / 2.5) / 10
+				seaLevel += increase
 				hSynth = 0
 				for pos, cell in next, cells do
 					--if cell.sand then print(cell.height, seaLevel) end
-					if cell.height > seaLevel + .5 then continue end
+					if cell.height > seaLevel + increase + .2 then continue end
 					if cell.height > seaLevel and cell.real.BrickColor ~= BrickColor.Red() then
 						cell.real.BrickColor = BrickColor.Red()
+						if not ents[pos] then continue end
+						ents[pos].real.Humanoid.DisplayName ..= '\n!!! Danger !!!'
 						continue
 					end
 					cell.height = seaLevel
@@ -883,6 +912,7 @@ while true do
 	end)
 	if not success then
 		utils.gdeclare('Restarting due to error ' .. (err or 'fix your sandbox'))
+		print(err or 'fix your sandbox')
 		script:ClearAllChildren()
 	end
 	task.wait(30)
