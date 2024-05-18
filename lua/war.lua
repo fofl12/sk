@@ -526,7 +526,7 @@ while true do
 					rcell.Reflectance = 0.4
 					rcell.Height = 0.5
 					voffset = 0.5
-				elseif height < 1 then
+				elseif height < 1 + biome.R and biome.G < 0.6 then
 					rcell.Color = BrickColor.Yellow().Color:Lerp(biome, 0.4)
 					rcell.Material = Enum.Material.Sand
 					rcell.Height = height
@@ -561,9 +561,9 @@ while true do
 				cells[Vector3.new(q, r, s)] = {
 					height = height,
 					rheight = voffset,
-					water = height < 0.5 and biome.B < 0.8,
+					water = height < 0.5 and biome.B < 0.6,
 					snow = height > 3,
-					sand = height < 1 and height > 0.5,
+					sand = height < 1 and height > 0.5 and biome.G < 0.6,
 					gold = gold,
 					build = build,
 					real = rcell,
@@ -746,10 +746,10 @@ while true do
 						if not good then return end
 						local rdist = dist
 						local ppos = tpos
-						for i = 1, dist + 1 do
-							local ipos = hex.round(pos:Lerp(tpos, i / (dist + 1)))
+						for i = 1, dist do
+							local ipos = hex.round(pos:Lerp(tpos, i / dist + 1))
 							if ipos == ppos then continue end
-							local icell = cells[hex.round(pos:Lerp(tpos, i / (dist + 1)))]
+							local icell = cells[hex.round(pos:Lerp(tpos, i / dist))]
 							local pcell = cells[ppos]
 							if icell.rheight - pcell.rheight > 2.5 then
 								rdist += icell.rheight - pcell.rheight
@@ -867,11 +867,17 @@ while true do
 			end
 			if iWin then break end
 			if hSynth > 3 then
-				local increase = math.ceil(hSynth / 2.5) / 10
+				local increase = math.ceil(hSynth / 3) / 10
 				seaLevel += increase
 				hSynth = 0
 				for pos, cell in next, cells do
 					--if cell.sand then print(cell.height, seaLevel) end
+					if cell.snow then
+						cell.height -= increase
+						cell.rheight -= increase
+						cell.real.Height = cell.rheight
+						cell.prompt.ObjectText = `Cell {utils.hexcode(pos, mapsize)} - Elevation {utils.fround(cell.height)}`
+					end
 					if cell.height > seaLevel + increase + .2 then continue end
 					if cell.height > seaLevel and cell.real.BrickColor ~= BrickColor.Red() then
 						cell.real.BrickColor = BrickColor.Red()
