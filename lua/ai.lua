@@ -1,6 +1,6 @@
 -- chat with ai in the comradio revision 2.1
 -- cai module (most of this script) made by synarx
-local channel = 'comradio:'
+local channel = 'comradio:a'
 local tag = 'ai.lua ' .. tostring(math.random(0, 9))
 local dementiafix = true -- no idea if this works
 
@@ -553,7 +553,7 @@ local rawCharacters: { CharacterDescription } = {
 				"Elegant", 
 				"Ugly"
 			}, 
-			Extra = "Adorable attractive awesome beautiful bewitching carbon copy classy clean cool cute dashing delectable delicate dignified elegant fancy fashionable fine flashy glamorous gorgeous graceful has a gender",
+			Extra = "Adorable attractive awesome beautiful bewitching carbon copy classy clean cool cute dashing delectable delicate dignified elegant fancy fashionable fine flashy glamorous gorgeous graceful has a genderhggggggggggggggggggggggg hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh hh h hhhhhh hhhhhhh",
 			Examples = {
 				{
 					"How are you?",
@@ -596,7 +596,7 @@ broadcast('Hello im the ai. Show commands with /help ; invoke by chatting')
 broadcast('Download ai.lua from github.com/fofl12/sk?!?!??!')
 MessagingService:SubscribeAsync(channel, function(rawData: { Data: ComradioMessage })
 	local data = HttpService:JSONDecode(rawData.Data)
-	if data.Author == owner.UserId and data.Nickname == tag then return end
+	--if data.Author == owner.UserId and data.Nickname == tag then return end
 	local authorName = Players:GetNameFromUserIdAsync(data.Author)
 	if data.Type == 'welcome' then
 		local success, response = character:Invoke({ role = 'system', content = `{authorName} has joined the conversation. If you would like to welcome them, please put the word "serendipitous" in your response.` })
